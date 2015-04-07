@@ -4,7 +4,7 @@
 
 abstract class Content
 {
-	abstract function DrawForm() ;
+	abstract function DrawFormElement() ;
 	abstract function AddChild(Content $Child) ; 
 	abstract function DelChild($name) ;
 	abstract function &GetChildren() ;
@@ -28,9 +28,13 @@ abstract class SimpleContent extends Content
 
 class StringContent extends SimpleContent
 {
-	function DrawForm() 
+	private $size ;
+
+	function GetSize() { return $this->size ; } 
+	function __construct($name,$size) { $this->size=$size ; parent::__construct($name) ; }
+	function DrawFormElement() 
 	{ 
-		return $this->GetName()." <input type=\"text\" name=\"".$this->GetName()."\"/> " ;
+		return $this->GetName()." <input type=\"text\" name=\"".$this->GetName()."\" size=\"".$this->GetSize()."\"> " ;
 	}
 }
 
@@ -39,7 +43,7 @@ abstract class CompositeContent extends Content
 	private $children ;
 	private $composer ;
 	
-	function __construct($name) { $this->children=array() ; parent::__construct($name) ; }
+	function __construct($name,$children) { $this->children=$children ; parent::__construct($name) ; }
 	function AddChild(Content $Child) { $this->children[$Child->GetName()]=$Child ; }
 	function DelChild($name) { unset($this->children[$name]) ; }
 	function &GetChildren() { return $this->children ; }
@@ -51,16 +55,26 @@ abstract class CompositeContent extends Content
 	function SetComposer($composer) { $this->composer=$composer ; }
 	function ReCompose() { $this->composer->Compose($this) ; }
 	
-	function DrawForm()
+	function DrawFormElement()
 	{
 		$ret_str='' ;
 		foreach ($this->GetChildren() as $child)
-			$ret_str.=$child->DrawForm() ;
+			$ret_str.=$child->DrawFormElement() ;
 		return $ret_str ;
 	}
+	
+	
 }
 
 class MasterTable extends CompositeContent
+{
+}
+
+class MultiDetailTable extends CompositeContent
+{
+}
+
+class AttributeTable extends CompositeContent
 {
 }
 
@@ -88,25 +102,25 @@ abstract class FormDecorator extends Content
 
 class FontDecorator extends FormDecorator
 {
-	function DrawForm()
+	function DrawFormElement()
 	{
-		return "<font color=".$this->GetName().">".$this->GetChild()->DrawForm()."</font>" ;
+		return "<font color=".$this->GetName().">".$this->GetChild()->DrawFormElement()."</font>" ;
 	}
 }
 
 class FieldSetDecorator extends FormDecorator
 {
-	function DrawForm()
+	function DrawFormElement()
 	{
-		return "<fieldset>".$this->GetChild()->DrawForm()."</fieldset>" ;
+		return "<fieldset>".$this->GetChild()->DrawFormElement()."</fieldset>" ;
 	}
 }
 
 class ParagrafDecorator extends FormDecorator
 {
-	function DrawForm()
+	function DrawFormElement()
 	{
-		return "<p>".$this->GetChild()->DrawForm()."</p>" ;
+		return "<p>".$this->GetChild()->DrawFormElement()."</p>" ;
 	}
 }
 
@@ -124,12 +138,13 @@ class HtmlFormComposer extends FormComposer
 	{
 		foreach ($form->GetChildren() as $key => $child)
 		{
-			$pdecor=new ParagrafDecorator("",$child,$key) ;
+/*
+  			$pdecor=new ParagrafDecorator("",$child,$key) ;
 			if ($child->GetName()=="Part")
 				$form->ReplaceChild($key,new FontDecorator("red",$pdecor,$key)) ;
 			else 
 				$form->ReplaceChild($key,$pdecor) ;
-				
+*/				
 				
 		}
 	}	
@@ -137,11 +152,29 @@ class HtmlFormComposer extends FormComposer
 }
 
 
-$form=new MasterTable('Words') ;
-$form->AddChild(new StringContent('Word')) ;
-$form->AddChild(new StringContent('Part')) ;
+$form=new MasterTable('Words',array(
+		                     'Word' => new StringContent('Word',20),
+		                	 'Definitions' => new MultiDetailTable('Definitions',array(
+		                	 	      'Parts' => new AttributeTable('Parts', array(
+		                	 	      		'Part' => new StringContent('Part', 10)
+		                	 	      )),    	
+		                	 	      'Definition' => new StringContent('Definition', 100),    	
+		                	 		  'Example' => new StringContent('Example', 100)    	
+		                	 )),
+		               		 'Topics' => new AttributeTable('Topics', array(
+		               		 		'Topic' => new StringContent('Topic', 30),
+		               		 		'Themes' => new AttributeTable('Themes', array(
+		               		 				'Theme' => new StringContent('Theme', 30)
+		               		 		))
+		               		 ))
+		                     )
+		             ) ;
 
-print_r($form) ;
+
+//$form->AddChild(new StringContent('Word')) ;
+//$form->AddChild(new StringContent('Part')) ;
+
+// print_r($form) ;
 
 $composer=new HtmlFormComposer ;
 $form->SetComposer($composer) ;
@@ -149,5 +182,5 @@ $form->ReCompose() ;
 
 print_r($form) ;
 
-echo $form->DrawForm() ;
+echo $form->DrawFormElement() ;
 ?>
