@@ -2,13 +2,17 @@
 
 // Content classes, based on GoF "Composite" design pattern   
 
+require_once 'forminterface.php';
+
 abstract class Content
 {
-	abstract function DrawFormElement() ;
+	abstract function GetFormElement($form_interface) ;
+	abstract function GetFormElement_end($form_interface) ;
 	abstract function AddChild(Content $Child) ; 
 	abstract function DelChild($name) ;
 	abstract function &GetChildren() ;
-	abstract function ReplaceChild($name,$newchild) ;
+	abstract function ReplaceChild_keepname($name,$newchild) ;
+	abstract function ReplaceChild_newname($name,$newname,$newchild) ;
 	
 	
 	private $name ;
@@ -22,8 +26,10 @@ abstract class SimpleContent extends Content
 	function AddChild(Content $Child) {} 
 	function DelChild($name) {}
 	function &GetChildren() { return array(); }
-	function ReplaceChild($name,$newchild) {}
+	function ReplaceChild_keepname($name,$newchild) {}
+	function ReplaceChild_newname($name,$newname,$newchild) {}
 	
+	function GetFormElement_end($form_interface) { return "" ; } 
 }
 
 class StringContent extends SimpleContent
@@ -32,38 +38,32 @@ class StringContent extends SimpleContent
 
 	function GetSize() { return $this->size ; } 
 	function __construct($name,$size) { $this->size=$size ; parent::__construct($name) ; }
-	function DrawFormElement() 
+	function GetFormElement($form_interface) 
 	{ 
-		return $this->GetName()." <input type=\"text\" name=\"".$this->GetName()."\" size=\"".$this->GetSize()."\"> " ;
+		return $form_interface->TextInput($this->GetName(),$this->GetSize()) ;
 	}
 }
 
 abstract class CompositeContent extends Content
 {
 	private $children ;
-	private $composer ;
 	
 	function __construct($name,$children) { $this->children=$children ; parent::__construct($name) ; }
 	function AddChild(Content $Child) { $this->children[$Child->GetName()]=$Child ; }
 	function DelChild($name) { unset($this->children[$name]) ; }
 	function &GetChildren() { return $this->children ; }
-	function ReplaceChild($name,$newchild) 
+	function ReplaceChild_keepname($name,$newchild) 
 	{ 
 			$this->children[$name]=$newchild ;
 	}
-	
-	function SetComposer($composer) { $this->composer=$composer ; }
-	function ReCompose() { $this->composer->Compose($this) ; }
-	
-	function DrawFormElement()
+	function ReplaceChild_newname($name,$newname,$newchild)
 	{
-		$ret_str='' ;
-		foreach ($this->GetChildren() as $child)
-			$ret_str.=$child->DrawFormElement() ;
-		return $ret_str ;
+		$this->children[$newname]=$newchild ;
+		unset($this->children[$name]) ;
 	}
 	
-	
+	function GetFormElement($form_interface) {	return "" ;	}
+	function GetFormElement_end($form_interface)  {	return "" ;	}
 }
 
 class MasterTable extends CompositeContent
@@ -76,6 +76,8 @@ class MultiDetailTable extends CompositeContent
 
 class AttributeTable extends CompositeContent
 {
+	function GetFormElement($form_interface) {	return $form_interface->Fieldset() ; }
+	function GetFormElement_end($form_interface)  {	return $form_interface->Fieldset_end() ; }
 }
 
 
@@ -96,57 +98,60 @@ abstract class FormDecorator extends Content
 
 	function AddChild(Content $Child) {} 
 	function DelChild($name) {}
-	function ReplaceChild($name,$newchild) { $this->Child[$this->childkey]=$newchild ; }
+	function ReplaceChild_keepname($name,$newchild) 
+	{ 
+		$this->Child[$this->childkey]=$newchild ; 
+	}
+	function ReplaceChild_newname($name,$newname,$newchild)
+	{
+		$this->Child[$newname]=$newchild ;
+		unset($this->Child[$this->childkey]) ;
+		$this->Child[$this->childkey]=$newname ;
+	}
+	function GetFormElement($form_interface) { return "" ; }
+	function GetFormElement_end($form_interface) { return "" ; }
 	
 }
 
-class FontDecorator extends FormDecorator
-{
-	function DrawFormElement()
-	{
-		return "<font color=".$this->GetName().">".$this->GetChild()->DrawFormElement()."</font>" ;
-	}
-}
 
-class FieldSetDecorator extends FormDecorator
+class GroupDecorator extends FormDecorator
 {
-	function DrawFormElement()
-	{
-		return "<fieldset>".$this->GetChild()->DrawFormElement()."</fieldset>" ;
-	}
-}
-
-class ParagrafDecorator extends FormDecorator
-{
-	function DrawFormElement()
-	{
-		return "<p>".$this->GetChild()->DrawFormElement()."</p>" ;
-	}
 }
 
 
-
-// GoF "Strategy" Composer of form layout
-abstract class FormComposer 
+// GoF "Strategy" 
+abstract class FormBuilder 
 {
-	abstract function Compose($form) ;
+	private $form_interface ;
+
+	function __construct($interface) { $this->form_interface=$interface ; }
+	function GetFormInterface() { return $this->form_interface ; } 
+	
+	abstract function Build($form) ;
 } 
 
-class HtmlFormComposer extends FormComposer
+// Builds form with basic elements only
+class SimpleFormBuilder extends FormBuilder
 {
-	function Compose($form)
+	function BuildElement($form_element)
 	{
-		foreach ($form->GetChildren() as $key => $child)
-		{
-/*
-  			$pdecor=new ParagrafDecorator("",$child,$key) ;
-			if ($child->GetName()=="Part")
-				$form->ReplaceChild($key,new FontDecorator("red",$pdecor,$key)) ;
-			else 
-				$form->ReplaceChild($key,$pdecor) ;
-*/				
+		$ret=$form_element->GetFormElement($this->GetFormInterface()) ;
+		
+		foreach ($form_element->GetChildren() as $key => $child)
+			$ret.=$this->BuildElement($child) ;
 				
-		}
+		$ret.=$form_element->GetFormElement_end($this->GetFormInterface()) ;
+		
+		return $ret ;
+	}
+
+	
+	function Build($form)
+	{
+     $ret=$this->GetFormInterface()->Header() ;
+     $ret.=$this->BuildElement($form) ;
+     $ret.=$this->GetFormInterface()->End() ;
+     return $ret ;
 	}	
 	
 }
@@ -170,17 +175,13 @@ $form=new MasterTable('Words',array(
 		                     )
 		             ) ;
 
-
-//$form->AddChild(new StringContent('Word')) ;
-//$form->AddChild(new StringContent('Part')) ;
-
-// print_r($form) ;
-
-$composer=new HtmlFormComposer ;
-$form->SetComposer($composer) ;
-$form->ReCompose() ;
-
 print_r($form) ;
 
-echo $form->DrawFormElement() ;
+$imp=new HtmlFormImp() ;
+$form_interface=new FormInterface($imp) ;
+$builder=new SimpleFormBuilder($form_interface) ;
+
+print_r($builder) ;
+
+echo $builder->Build($form) ;
 ?>
