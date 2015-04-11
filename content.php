@@ -2,6 +2,7 @@
 
 // Content classes, based on GoF "Composite" design pattern   
 
+require_once 'foundation.php';
 require_once 'forminterface.php';
 
 abstract class Content
@@ -10,7 +11,7 @@ abstract class Content
 	abstract function GetFormElement_end($form_interface) ;
 	abstract function AddChild(Content $Child) ; 
 	abstract function DelChild($name) ;
-	abstract function &GetChildren() ;
+	abstract function GetChildrenIterator() ;
 	abstract function ReplaceChild_keepname($name,$newchild) ;
 	abstract function ReplaceChild_newname($name,$newname,$newchild) ;
 	
@@ -25,7 +26,7 @@ abstract class SimpleContent extends Content
 { 
 	function AddChild(Content $Child) {} 
 	function DelChild($name) {}
-	function &GetChildren() { return array(); }
+	function GetChildrenIterator() { global $null_iterator ; return $null_iterator ; }
 	function ReplaceChild_keepname($name,$newchild) {}
 	function ReplaceChild_newname($name,$newname,$newchild) {}
 	
@@ -46,12 +47,18 @@ class StringContent extends SimpleContent
 
 abstract class CompositeContent extends Content
 {
-	private $children ;
+	protected $children ;
+	private $iterator ;
 	
-	function __construct($name,$children) { $this->children=$children ; parent::__construct($name) ; }
+	function __construct($name,$children) 
+	{ 
+		$this->children=$children ;
+		$this->iterator=new GofArrayIterator($this->children) ;
+		parent::__construct($name) ; 
+	}
 	function AddChild(Content $Child) { $this->children[$Child->GetName()]=$Child ; }
 	function DelChild($name) { unset($this->children[$name]) ; }
-	function &GetChildren() { return $this->children ; }
+	function GetChildrenIterator() { return $this->iterator ; }
 	function ReplaceChild_keepname($name,$newchild) 
 	{ 
 			$this->children[$name]=$newchild ;
@@ -82,31 +89,28 @@ class AttributeTable extends CompositeContent
 
 
 // GoF "Decorator" class family 
-abstract class FormDecorator extends Content
+abstract class FormDecorator extends CompositeContent
 {
-	private $Child, $childkey ;
+	private $childkey ;
 	function __construct($name,$Child,$childkey) 
 	{ 
-		$this->Child=array() ; 
 		$this->childkey= $childkey ; 
-		$this->Child[$childkey]=$Child ; 
-		parent::__construct($name) ; 
+		parent::__construct($name,$Child) ; 
 	}
 	
-	function &GetChildren() { return $this->Child ; }
-	function GetChild() { return $this->Child[$this->childkey] ; }
+	function GetChild() { return $this->children[$this->childkey] ; }
 
 	function AddChild(Content $Child) {} 
 	function DelChild($name) {}
 	function ReplaceChild_keepname($name,$newchild) 
 	{ 
-		$this->Child[$this->childkey]=$newchild ; 
+		$this->children[$this->childkey]=$newchild ; 
 	}
 	function ReplaceChild_newname($name,$newname,$newchild)
 	{
-		$this->Child[$newname]=$newchild ;
-		unset($this->Child[$this->childkey]) ;
-		$this->Child[$this->childkey]=$newname ;
+		$this->children[$newname]=$newchild ;
+		unset($this->children[$this->childkey]) ;
+		$this->children[$this->childkey]=$newname ;
 	}
 	function GetFormElement($form_interface) { return "" ; }
 	function GetFormElement_end($form_interface) { return "" ; }
@@ -137,8 +141,9 @@ class SimpleFormBuilder extends FormBuilder
 	{
 		$ret=$form_element->GetFormElement($this->GetFormInterface()) ;
 		
-		foreach ($form_element->GetChildren() as $key => $child)
-			$ret.=$this->BuildElement($child) ;
+		$iterator=$form_element->GetChildrenIterator() ;
+		for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
+			$ret.=$this->BuildElement($iterator->Current()) ;
 				
 		$ret.=$form_element->GetFormElement_end($this->GetFormInterface()) ;
 		
