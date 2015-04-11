@@ -181,7 +181,5 @@ $imp=new HtmlFormImp() ;
 $form_interface=new FormInterface($imp) ;
 $builder=new SimpleFormBuilder($form_interface) ;
 
-print_r($builder) ;
-
 echo $builder->Build($form) ;
 ?>
