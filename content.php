@@ -7,8 +7,8 @@ require_once 'forminterface.php';
 
 abstract class Content
 {
-	abstract function GetFormElement($form_interface) ;
-	abstract function GetFormElement_end($form_interface) ;
+	abstract function Accept($visitor) ;
+
 	abstract function AddChild(Content $Child) ; 
 	abstract function DelChild($name) ;
 	abstract function GetChildrenIterator() ;
@@ -29,8 +29,6 @@ abstract class SimpleContent extends Content
 	function GetChildrenIterator() { global $null_iterator ; return $null_iterator ; }
 	function ReplaceChild_keepname($name,$newchild) {}
 	function ReplaceChild_newname($name,$newname,$newchild) {}
-	
-	function GetFormElement_end($form_interface) { return "" ; } 
 }
 
 class StringContent extends SimpleContent
@@ -39,9 +37,10 @@ class StringContent extends SimpleContent
 
 	function GetSize() { return $this->size ; } 
 	function __construct($name,$size) { $this->size=$size ; parent::__construct($name) ; }
-	function GetFormElement($form_interface) 
+
+	function Accept($visitor) 
 	{ 
-		return $form_interface->TextInput($this->GetName(),$this->GetSize()) ;
+		return $visitor->VisitString($this) ;
 	}
 }
 
@@ -69,8 +68,10 @@ abstract class CompositeContent extends Content
 		unset($this->children[$name]) ;
 	}
 	
-	function GetFormElement($form_interface) {	return "" ;	}
-	function GetFormElement_end($form_interface)  {	return "" ;	}
+	function Accept($visitor) 
+	{ 
+		return "" ;
+	}
 }
 
 class MasterTable extends CompositeContent
@@ -83,8 +84,10 @@ class MultiDetailTable extends CompositeContent
 
 class AttributeTable extends CompositeContent
 {
-	function GetFormElement($form_interface) {	return $form_interface->Fieldset() ; }
-	function GetFormElement_end($form_interface)  {	return $form_interface->Fieldset_end() ; }
+	function Accept($visitor)
+	{
+		return $visitor->VisitAttributeTable($this) ;
+	}
 }
 
 
@@ -112,9 +115,6 @@ abstract class FormDecorator extends CompositeContent
 		unset($this->children[$this->childkey]) ;
 		$this->children[$this->childkey]=$newname ;
 	}
-	function GetFormElement($form_interface) { return "" ; }
-	function GetFormElement_end($form_interface) { return "" ; }
-	
 }
 
 
@@ -123,29 +123,62 @@ class GroupDecorator extends FormDecorator
 }
 
 
-// GoF "Strategy" 
-abstract class FormBuilder 
+// GoF "Visitor" classes to get specific information from content structure
+abstract class ContentVisitor
+{
+	function VisitString($content) {} 
+	function VisitMasterTable($content) {} 
+	function VisitMultiDetailTable($content) {}
+	function VisitAttributeTable($content) {}
+} 
+
+class FormElementVisitor extends ContentVisitor
 {
 	private $form_interface ;
-
-	function __construct($interface) { $this->form_interface=$interface ; }
-	function GetFormInterface() { return $this->form_interface ; } 
+	private $after ;
 	
+	function __construct($interface,$after=0) { $this->form_interface=$interface ; $this->after=$after ; }
+	
+	function VisitString($string)
+	{
+		return $this->after ? "" : $this->form_interface->TextInput($string->GetName(),$string->GetSize()) ;
+	}
+	function VisitAttributeTable($content) 
+	{
+		return $this->after ? $this->form_interface->Fieldset_end() : $this->form_interface->Fieldset() ;  
+	}
+}
+
+
+// GoF "Strategy" algorithm to build form
+abstract class FormBuilder 
+{
 	abstract function Build($form) ;
 } 
 
 // Builds form with basic elements only
 class SimpleFormBuilder extends FormBuilder
 {
+	private $form_visitor ; 
+	private $form_visitor_after ;
+	private $form_interface ;
+	
+	function __construct($form_interface) 
+	{ 
+		$this->form_visitor=new FormElementVisitor($form_interface) ;
+		$this->form_visitor_after=new FormElementVisitor($form_interface,1) ;
+		$this->form_interface=$form_interface ;
+	}
+	
 	function BuildElement($form_element)
 	{
-		$ret=$form_element->GetFormElement($this->GetFormInterface()) ;
+		$ret=$form_element->Accept($this->form_visitor) ;
 		
 		$iterator=$form_element->GetChildrenIterator() ;
 		for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
 			$ret.=$this->BuildElement($iterator->Current()) ;
 				
-		$ret.=$form_element->GetFormElement_end($this->GetFormInterface()) ;
+		$ret.=$form_element->Accept($this->form_visitor_after) ;
 		
 		return $ret ;
 	}
@@ -153,9 +186,9 @@ class SimpleFormBuilder extends FormBuilder
 	
 	function Build($form)
 	{
-     $ret=$this->GetFormInterface()->Header() ;
+     $ret=$this->form_interface->Header() ;
      $ret.=$this->BuildElement($form) ;
-     $ret.=$this->GetFormInterface()->End() ;
+     $ret.=$this->form_interface->End() ;
      return $ret ;
 	}	
 	
