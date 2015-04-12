@@ -199,30 +199,48 @@ class FormBuilder extends Builder
 	function BuildElementEnd($form_element) { $this->form.=$form_element->Accept($this->form_visitor_after) ; }
 }
 
+
+class Builders extends Builder 
+{
+	private $builders ;
+	private $it ;
+	
+	function __construct($builders) 
+	{
+		$this->builders=$builders ;
+		$this->it=new GofArrayIterator($this->builders) ;
+	} 
+	
+	function BuildStart() { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildStart() ; }
+	function BuildEnd() { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildEnd() ; }
+	function BuildElementStart($el) { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildElementStart($el) ; }
+	function BuildElementEnd($el) { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildElementEnd($el) ; }
+}
+
 // Object to parse content structure
 class ContentParser
 {
-	private $form_builder ;
+	private $builders ;
 	
-	function __construct($builder) { $this->form_builder=$builder ; }
+	function __construct($builders) { $this->builders=$builders ; }
 	
 	function ParseElement($content_element)
 	{
-		$this->form_builder->BuildElementStart($content_element) ;
+		$this->builders->BuildElementStart($content_element) ;
 		
 		$iterator=$content_element->GetChildrenIterator() ;
 		for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
 			$this->ParseElement($iterator->Current()) ;
 				
-		$this->form_builder->BuildElementEnd($content_element) ;
+		$this->builders->BuildElementEnd($content_element) ;
 	}
 
 	
 	function Parse($content)
 	{
-		$this->form_builder->BuildStart() ;
+		$this->builders->BuildStart() ;
 		$this->ParseElement($content) ;
-		$this->form_builder->BuildEnd() ;
+		$this->builders->BuildEnd() ;
 	}	
 }
 
@@ -249,9 +267,11 @@ $content=new MasterTable('Words',array(
 
 $imp=new HtmlFormImp() ;
 $form_interface=new FormInterface($imp) ;
-$builder=new FormBuilder($form_interface) ;
-$parser=new ContentParser($builder) ;
+$form_builder=new FormBuilder($form_interface) ;
+$all_builders=new Builders(array($form_builder)) ;
+$parser=new ContentParser($all_builders) ;
+
 $parser->Parse($content) ;
 
-echo $builder->GetForm() ;
+echo $form_builder->GetForm() ;
 ?>
