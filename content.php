@@ -141,61 +141,93 @@ class FormElementVisitor extends ContentVisitor
 	
 	function VisitString($string)
 	{
-		return $this->after ? "" : $this->form_interface->TextInput($string->GetName(),$string->GetSize()) ;
-	}
-	function VisitAttributeTable($content) 
-	{
-		return $this->after ? $this->form_interface->Fieldset_end() : $this->form_interface->Fieldset() ;  
-	}
-}
-
-
-// GoF "Strategy" algorithm to build form
-abstract class FormBuilder 
-{
-	abstract function Build($form) ;
-} 
-
-// Builds form with basic elements only
-class SimpleFormBuilder extends FormBuilder
-{
-	private $form_visitor ; 
-	private $form_visitor_after ;
-	private $form_interface ;
-	
-	function __construct($form_interface) 
-	{ 
-		$this->form_visitor=new FormElementVisitor($form_interface) ;
-		$this->form_visitor_after=new FormElementVisitor($form_interface,1) ;
-		$this->form_interface=$form_interface ;
-	}
-	
-	function BuildElement($form_element)
-	{
-		$ret=$form_element->Accept($this->form_visitor) ;
-		
-		$iterator=$form_element->GetChildrenIterator() ;
-		for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
-			$ret.=$this->BuildElement($iterator->Current()) ;
-				
-		$ret.=$form_element->Accept($this->form_visitor_after) ;
-		
+		$ret="" ;
+		if (!$this->after)
+		{
+			$ret.=$this->form_interface->Paragraf() ;
+			$ret.=$this->form_interface->TextInput($string->GetName(),$string->GetSize()) ;
+			$ret.=$this->form_interface->Paragraf_end() ;
+		}
 		return $ret ;
 	}
 
-	
-	function Build($form)
+	function VisitAttributeTable($content) 
 	{
-     $ret=$this->form_interface->Header() ;
-     $ret.=$this->BuildElement($form) ;
-     $ret.=$this->form_interface->End() ;
-     return $ret ;
-	}	
-	
+		if ($this->after)
+			 return $this->form_interface->Fieldset_end() ;
+		else 
+		{
+			$ret=$this->form_interface->Fieldset() ;
+			$ret.=$this->form_interface->ListInput($content->GetName(),array()) ;
+			return $ret ;   
+		}
+	}
 }
 
 
-$form=new MasterTable('Words',array(
+// GoF "Builder" class to build various objects from content structure 
+abstract class Builder
+{
+	abstract function BuildStart() ;
+	abstract function BuildEnd() ;
+	abstract function BuildElementStart($form_element) ;
+	abstract function BuildElementEnd($form_element) ;
+}
+
+
+class FormBuilder extends Builder
+{
+	private $form ; // Form object to build
+	private $form_visitor ;
+	private $form_visitor_after ;
+	private $form_interface ;
+	
+	function __construct($form_interface)
+	{
+		$this->form_visitor=new FormElementVisitor($form_interface) ;
+		$this->form_visitor_after=new FormElementVisitor($form_interface,1) ;
+		$this->form_interface=$form_interface ;
+		$this->form="" ;
+	}
+	
+	function GetForm() { return $this->form ; }
+	
+	// implementing builder interface
+	function BuildStart() {	$this->form=$this->form_interface->Header() ; }
+	function BuildEnd() {	$this->form.=$this->form_interface->End() ; }
+	function BuildElementStart($form_element) {	$this->form.=$form_element->Accept($this->form_visitor) ; }
+	function BuildElementEnd($form_element) { $this->form.=$form_element->Accept($this->form_visitor_after) ; }
+}
+
+// Object to parse content structure
+class ContentParser
+{
+	private $form_builder ;
+	
+	function __construct($builder) { $this->form_builder=$builder ; }
+	
+	function ParseElement($content_element)
+	{
+		$this->form_builder->BuildElementStart($content_element) ;
+		
+		$iterator=$content_element->GetChildrenIterator() ;
+		for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
+			$this->ParseElement($iterator->Current()) ;
+				
+		$this->form_builder->BuildElementEnd($content_element) ;
+	}
+
+	
+	function Parse($content)
+	{
+		$this->form_builder->BuildStart() ;
+		$this->ParseElement($content) ;
+		$this->form_builder->BuildEnd() ;
+	}	
+}
+
+
+$content=new MasterTable('Words',array(
 		                     'Word' => new StringContent('Word',20),
 		                	 'Definitions' => new MultiDetailTable('Definitions',array(
 		                	 	      'Parts' => new AttributeTable('Parts', array(
@@ -213,11 +245,13 @@ $form=new MasterTable('Words',array(
 		                     )
 		             ) ;
 
-print_r($form) ;
+// print_r($form) ;
 
 $imp=new HtmlFormImp() ;
 $form_interface=new FormInterface($imp) ;
-$builder=new SimpleFormBuilder($form_interface) ;
+$builder=new FormBuilder($form_interface) ;
+$parser=new ContentParser($builder) ;
+$parser->Parse($content) ;
 
-echo $builder->Build($form) ;
+echo $builder->GetForm() ;
 ?>
