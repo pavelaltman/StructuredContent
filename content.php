@@ -3,6 +3,8 @@
 // Content classes, based on GoF "Composite" design pattern   
 
 require_once 'foundation.php';
+require_once 'query.php';
+require_once 'sqlconnect.php';
 require_once 'forminterface.php';
 
 abstract class Content
@@ -12,14 +14,17 @@ abstract class Content
 	abstract function AddChild(Content $Child) ; 
 	abstract function DelChild($name) ;
 	abstract function GetChildrenIterator() ;
+	
 	abstract function ReplaceChild_keepname($name,$newchild) ;
 	abstract function ReplaceChild_newname($name,$newname,$newchild) ;
 	
-	
 	private $name ;
+	private $par ;
 	
-	function __construct($name) { $this->name=$name ; }
+	function __construct($name) { $this->name=$name ; $par=null ; }
 	function GetName() { return $this->name ; }
+	function Par() { return $this->par ; }
+	function SetPar($par) { $this->par=$par ; }
 }
 
 abstract class SimpleContent extends Content 
@@ -52,10 +57,21 @@ abstract class CompositeContent extends Content
 	function __construct($name,$children) 
 	{ 
 		$this->children=$children ;
+
+		// create iterator to itereate children  
 		$this->iterator=new GofArrayIterator($this->children) ;
+		
+		// set parent to all chidren
+		for ($this->iterator->First(); !$this->iterator->IsDone() ; $this->iterator->Next())
+			$this->iterator->Current()->SetPar($this) ;
+		
 		parent::__construct($name) ; 
 	}
-	function AddChild(Content $Child) { $this->children[$Child->GetName()]=$Child ; }
+	function AddChild(Content $Child) 
+	{  
+		$Child->SetPar($this) ;
+		$this->children[$Child->GetName()]=$Child ; 
+	}
 	function DelChild($name) { unset($this->children[$name]) ; }
 	function GetChildrenIterator() { return $this->iterator ; }
 	function ReplaceChild_keepname($name,$newchild) 
@@ -76,10 +92,18 @@ abstract class CompositeContent extends Content
 
 class MasterTable extends CompositeContent
 {
+	function Accept($visitor)
+	{
+		return $visitor->VisitMasterTable($this) ;
+	}
 }
 
 class MultiDetailTable extends CompositeContent
 {
+	function Accept($visitor)
+	{
+		return $visitor->VisitMultiDetailTable($this) ;
+	}
 }
 
 class AttributeTable extends CompositeContent
@@ -132,6 +156,8 @@ abstract class ContentVisitor
 	function VisitAttributeTable($content) {}
 } 
 
+
+// Visitor to get form elements from content structure
 class FormElementVisitor extends ContentVisitor
 {
 	private $form_interface ;
@@ -165,16 +191,67 @@ class FormElementVisitor extends ContentVisitor
 }
 
 
-// GoF "Builder" class to build various objects from content structure 
-abstract class Builder
+// Visitor to get sql query elements from content structure
+class QueryElementVisitor extends ContentVisitor
 {
-	abstract function BuildStart() ;
-	abstract function BuildEnd() ;
-	abstract function BuildElementStart($form_element) ;
-	abstract function BuildElementEnd($form_element) ;
+	private $query ;
+	
+	function __construct($query) { $this->query=$query ; }
+	
+	function VisitString($string) { $this->query->add_select($string->Par()->GetName().".".$string->GetName()) ; }
+	function VisitMasterTable($mastertable)	{ $this->query->add_from($mastertable->GetName()) ;}
+	function VisitMultiDetailTable($mdt)	
+	{ 
+		$this->query->add_join($mdt->GetName(),$mdt->GetName().'.'.$mdt->Par()->GetName().'='.$mdt->Par()->GetName().'.Id') ;
+	}
+	function VisitAttributeTable($at)	
+	{ 
+		$this->query->add_join($at->GetName(),$at->GetName().'.Id='.$at->Par()->GetName().'.'.$at->GetName()) ;
+	}
+}
+
+class SaveElementVisitor extends ContentVisitor
+{
+	private $query ;
+	
+	function __construct($query) { $this->query=$query ; }
+	
+	function VisitString($string) 
+	{ 
+		$this->query->add_values("Size",$string->GetSize()) ; 
+	}
 }
 
 
+
+// GoF "Builder" class to build various objects from content structure 
+abstract class Builder
+{
+	function BuildStart() {}
+	function BuildEnd() {}
+	function BuildElementStart($form_element) {}
+	function BuildElementEnd($form_element) {}
+}
+
+// array of builders to build several objects at one parse
+class Builders extends Builder
+{
+	private $builders ;
+	private $it ;
+
+	function __construct($builders)
+	{
+		$this->builders=$builders ;
+		$this->it=new GofArrayIterator($this->builders) ;
+	}
+
+	function BuildStart() { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildStart() ; }
+	function BuildEnd() { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildEnd() ; }
+	function BuildElementStart($el) { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildElementStart($el) ; }
+	function BuildElementEnd($el) { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildElementEnd($el) ; }
+}
+
+// Builds html form 
 class FormBuilder extends Builder
 {
 	private $form ; // Form object to build
@@ -200,22 +277,53 @@ class FormBuilder extends Builder
 }
 
 
-class Builders extends Builder 
+// Builds select query to get content 
+class QueryBuilder extends Builder
 {
-	private $builders ;
-	private $it ;
-	
-	function __construct($builders) 
+	private $query ; // select query object to build
+	private $query_visitor ;
+
+	function __construct()
 	{
-		$this->builders=$builders ;
-		$this->it=new GofArrayIterator($this->builders) ;
-	} 
-	
-	function BuildStart() { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildStart() ; }
-	function BuildEnd() { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildEnd() ; }
-	function BuildElementStart($el) { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildElementStart($el) ; }
-	function BuildElementEnd($el) { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildElementEnd($el) ; }
+		$this->query=new SqlQuery();
+		$this->query_visitor=new QueryElementVisitor($this->query) ;
+	}
+
+	function GetQuery() { return $this->query->get_query() ; }
+
+	// implementing builder interface
+	function BuildElementStart($element) {	$element->Accept($this->query_visitor) ; }
 }
+
+
+// Builds insert query to save content structure
+class SaveBuilder extends Builder
+{
+	private $query ; // insert query object to execute
+	private $save_visitor ;
+
+	function __construct()
+	{
+		$this->query=new SqlQuery();
+		$this->save_visitor=new SaveElementVisitor($this->query) ;
+	}
+
+	function GetQuery() { return $this->query->get_query() ; }
+
+	// implementing builder interface
+	function BuildElementStart($element) 
+	{
+		$this->query->Reset() ;
+		$this->query->add_insert("sc_content") ; 
+		$this->query->add_values("Name",$element->GetName()) ; 
+		$this->query->add_values("ClassName",get_class($element)) ;
+		if ($par=$element->Par()) 
+	  		$this->query->add_values("ParentName",$par->GetName()) ;
+		$element->Accept($this->save_visitor) ;
+		print("<p>".$this->query->get_insert_query()."</p>") ; 
+	}
+}
+
 
 // Object to parse content structure
 class ContentParser
@@ -265,13 +373,29 @@ $content=new MasterTable('Words',array(
 
 // print_r($form) ;
 
+// create form builder
 $imp=new HtmlFormImp() ;
 $form_interface=new FormInterface($imp) ;
 $form_builder=new FormBuilder($form_interface) ;
-$all_builders=new Builders(array($form_builder)) ;
+
+// create query builder
+$query_builder=new QueryBuilder() ;
+
+// create save builder
+$save_builder=new SaveBuilder() ;
+
+// create all_builders object, containing all needed builders
+$all_builders=new Builders(array($form_builder,$query_builder,$save_builder)) ;
 $parser=new ContentParser($all_builders) ;
 
+// parse composite structure with all builders
 $parser->Parse($content) ;
 
 echo $form_builder->GetForm() ;
+echo $query_builder->GetQuery() ;
+
+$db=new MySqliConnector('dollsfun.mysql.ukraine.com.ua','dollsfun_content','93hfkudn', 'dollsfun_content') ;
+$x=$db->QueryObject("select * from wl_state") ;
+
+print_r($x) ;
 ?>
