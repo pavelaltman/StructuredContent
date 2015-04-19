@@ -6,6 +6,7 @@ abstract class GofIterator
 	abstract function Next() ;	
 	abstract function IsDone() ;	
 	abstract function &Current() ;	
+	abstract function Num() ;
 }
 
 class GofNullIterator extends GofIterator
@@ -14,6 +15,7 @@ class GofNullIterator extends GofIterator
 	function Next() {}
 	function IsDone() { return true ; }
 	function &Current() { return null ; }
+	function Num() { return 0 ; }
 }
 
 $null_iterator=new GofNullIterator ;
@@ -28,6 +30,7 @@ class GofArrayIterator extends GofIterator
 	function Next() { $this->i=$this->i+1 ; next($this->arr) ; }
 	Function IsDone() { return $this->i >= count($this->arr) ; }
 	Function &Current() { return current($this->arr) ; }
+	Function Num() { return count($this->arr) ; }
 }
 
 

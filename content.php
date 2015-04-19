@@ -13,7 +13,6 @@ abstract class Content
 
 	abstract function AddChild(Content $Child) ; 
 	abstract function DelChild($name) ;
-	abstract function GetChildrenIterator() ;
 	
 	abstract function ReplaceChild_keepname($name,$newchild) ;
 	abstract function ReplaceChild_newname($name,$newname,$newchild) ;
@@ -21,7 +20,24 @@ abstract class Content
 	private $name ;
 	private $par ;
 	
-	function __construct($name) { $this->name=$name ; $par=null ; }
+	protected $children ;
+	private $iterator ;
+	
+	function __construct($name,$children)
+	{
+		$this->name=$name ;
+		$this->children=$children ;
+		$this->par=null ;
+				
+		// create iterator to itereate children
+		$this->iterator=new GofArrayIterator($this->children) ;
+	
+		// set parent to all chidren
+		for ($this->iterator->First(); !$this->iterator->IsDone() ; $this->iterator->Next())
+			$this->iterator->Current()->SetPar($this) ;
+	}
+	
+	function GetChildrenIterator() { return $this->iterator ; }
 	function GetName() { return $this->name ; }
 	function Par() { return $this->par ; }
 	function SetPar($par) { $this->par=$par ; }
@@ -31,7 +47,6 @@ abstract class SimpleContent extends Content
 { 
 	function AddChild(Content $Child) {} 
 	function DelChild($name) {}
-	function GetChildrenIterator() { global $null_iterator ; return $null_iterator ; }
 	function ReplaceChild_keepname($name,$newchild) {}
 	function ReplaceChild_newname($name,$newname,$newchild) {}
 }
@@ -41,7 +56,7 @@ class StringContent extends SimpleContent
 	private $size ;
 
 	function GetSize() { return $this->size ; } 
-	function __construct($name,$size) { $this->size=$size ; parent::__construct($name) ; }
+	function SetSize($size) { $this->size=$size ; } 
 
 	function Accept($visitor) 
 	{ 
@@ -51,29 +66,12 @@ class StringContent extends SimpleContent
 
 abstract class CompositeContent extends Content
 {
-	protected $children ;
-	private $iterator ;
-	
-	function __construct($name,$children) 
-	{ 
-		$this->children=$children ;
-
-		// create iterator to itereate children  
-		$this->iterator=new GofArrayIterator($this->children) ;
-		
-		// set parent to all chidren
-		for ($this->iterator->First(); !$this->iterator->IsDone() ; $this->iterator->Next())
-			$this->iterator->Current()->SetPar($this) ;
-		
-		parent::__construct($name) ; 
-	}
 	function AddChild(Content $Child) 
 	{  
 		$Child->SetPar($this) ;
 		$this->children[$Child->GetName()]=$Child ; 
 	}
 	function DelChild($name) { unset($this->children[$name]) ; }
-	function GetChildrenIterator() { return $this->iterator ; }
 	function ReplaceChild_keepname($name,$newchild) 
 	{ 
 			$this->children[$name]=$newchild ;
@@ -210,6 +208,8 @@ class QueryElementVisitor extends ContentVisitor
 	}
 }
 
+
+// visitor to add type-specific fields to insert query  
 class SaveElementVisitor extends ContentVisitor
 {
 	private $query ;
@@ -219,6 +219,20 @@ class SaveElementVisitor extends ContentVisitor
 	function VisitString($string) 
 	{ 
 		$this->query->add_values("Size",$string->GetSize()) ; 
+	}
+}
+
+
+// visitor to add type-specific fields to insert query
+class RestoreElementVisitor extends ContentVisitor
+{
+	private $object ;
+
+	function SetObject($object) { $this->object=$object ; }
+
+	function VisitString($string)
+	{
+		$string->SetSize($this->object->Size) ;
 	}
 }
 
@@ -301,11 +315,15 @@ class SaveBuilder extends Builder
 {
 	private $query ; // insert query object to execute
 	private $save_visitor ;
+	private $sqlconnect ;
+	private $order ;
 
-	function __construct()
+	function __construct($connect)
 	{
+		$this->sqlconnect=$connect ;
 		$this->query=new SqlQuery();
 		$this->save_visitor=new SaveElementVisitor($this->query) ;
+		$order=0 ;
 	}
 
 	function GetQuery() { return $this->query->get_query() ; }
@@ -315,12 +333,24 @@ class SaveBuilder extends Builder
 	{
 		$this->query->Reset() ;
 		$this->query->add_insert("sc_content") ; 
+		
+		// adding common fields to insert query
 		$this->query->add_values("Name",$element->GetName()) ; 
 		$this->query->add_values("ClassName",get_class($element)) ;
 		if ($par=$element->Par()) 
 	  		$this->query->add_values("ParentName",$par->GetName()) ;
-		$element->Accept($this->save_visitor) ;
-		print("<p>".$this->query->get_insert_query()."</p>") ; 
+		
+		
+		$element->Accept($this->save_visitor) ; // adding class-specific fields to query 
+		
+		$this->query->add_values("Ord",++$this->order) ; // adding order
+		$this->query->add_values("Chldrn",$element->GetChildrenIterator()->Num()) ; // adding children count
+		
+		$this->query->add_duplicate("Ord=".$this->order) ; // if allready exists then update order and number of children
+		$this->query->add_duplicate("Chldrn=".$element->GetChildrenIterator()->Num()) ;
+		
+		//echo "<p>".$this->query->get_insert_query()."</p>" ;
+		$this->sqlconnect->SimpleQuery($this->query->get_insert_query()) ; 
 	}
 }
 
@@ -336,6 +366,7 @@ class ContentParser
 	{
 		$this->builders->BuildElementStart($content_element) ;
 		
+		//echo "<br/>I: "  ; print_r($content_element->GetName()) ;
 		$iterator=$content_element->GetChildrenIterator() ;
 		for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
 			$this->ParseElement($iterator->Current()) ;
@@ -353,6 +384,46 @@ class ContentParser
 }
 
 
+class ContentRestorer
+{
+	private $sqlconnect ;
+
+	function __construct($connect)
+	{
+		$this->sqlconnect=$connect ;
+	}
+	
+	function Restore()
+	{
+		$It=$this->sqlconnect->QueryObjectIterator("select * from sc_content order by ord desc") ;
+
+		// creating visitor object to restore specific fields
+		$restore_visitor=new RestoreElementVisitor ;
+		
+		$stack=array() ;
+		for ($It->First() ; !$It->IsDone() ; $It->Next()) 
+		{
+			$row=$It->Current() ;
+			
+			$classname=$row->ClassName ;
+			$chldrn=array_slice($stack,0,$row->Chldrn) ; // get sub-array of children from stack 
+			
+			// create object of specific class but with generic constructor
+			$current_obj=new $classname($row->Name,$chldrn) ; 
+			
+			// adding class-specific fields to query
+			$restore_visitor->SetObject($row) ;
+			$current_obj->Accept($restore_visitor) ; 
+					
+			array_splice($stack,0,$row->Chldrn) ; // shifts stack from used children
+			array_unshift($stack,$current_obj) ; // unshift new object to stack 
+		}
+		return $current_obj ;
+	}
+	
+}
+
+/*
 $content=new MasterTable('Words',array(
 		                     'Word' => new StringContent('Word',20),
 		                	 'Definitions' => new MultiDetailTable('Definitions',array(
@@ -369,9 +440,17 @@ $content=new MasterTable('Words',array(
 		               		 		))
 		               		 ))
 		                     )
-		             ) ;
+		           		) ;
+*/
 
-// print_r($form) ;
+// create MySqli connection
+$db=new MySqliConnector('dollsfun.mysql.ukraine.com.ua','dollsfun_content','93hfkudn', 'dollsfun_content') ;
+
+// create restorer object and use it to restore content structure from sql table
+$restorer=new ContentRestorer($db) ;
+$content=$restorer->Restore() ;
+
+// print_r($content) ;
 
 // create form builder
 $imp=new HtmlFormImp() ;
@@ -382,10 +461,10 @@ $form_builder=new FormBuilder($form_interface) ;
 $query_builder=new QueryBuilder() ;
 
 // create save builder
-$save_builder=new SaveBuilder() ;
+// $save_builder=new SaveBuilder($db) ;
 
 // create all_builders object, containing all needed builders
-$all_builders=new Builders(array($form_builder,$query_builder,$save_builder)) ;
+$all_builders=new Builders(array($form_builder,$query_builder)) ;
 $parser=new ContentParser($all_builders) ;
 
 // parse composite structure with all builders
@@ -394,8 +473,4 @@ $parser->Parse($content) ;
 echo $form_builder->GetForm() ;
 echo $query_builder->GetQuery() ;
 
-$db=new MySqliConnector('dollsfun.mysql.ukraine.com.ua','dollsfun_content','93hfkudn', 'dollsfun_content') ;
-$x=$db->QueryObject("select * from wl_state") ;
-
-print_r($x) ;
 ?>

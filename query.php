@@ -7,8 +7,9 @@ class SqlQuery
 			$jstr, // left join clause 
 			$istr, // table to insert 
 			$cstr, // columns to insert 
-			$vstr; // values to insert
-			
+			$vstr, // values to insert
+			$dstr; // update on duplicate key
+	
 
 	function Reset()
 	{
@@ -19,6 +20,7 @@ class SqlQuery
 		$this->istr="" ; 
 		$this->cstr="" ; 
 		$this->vstr="" ;
+		$this->dstr="" ;
 	}
 	
 	function __construct()
@@ -49,7 +51,7 @@ class SqlQuery
 		$this->wstr=$this->wstr.(strlen($this->wstr) ? " AND ":"").$add_condition ;
 		return $this->wstr ;
 	}
-
+	
 	function add_insert($ins_table)
 	{
 		$this->istr=$ins_table ;
@@ -59,9 +61,15 @@ class SqlQuery
 	function add_values($column,$value)
 	{
 		$this->cstr=$this->cstr.(strlen($this->cstr) ? ",":"").$column ;
-		$this->vstr=$this->vstr.(strlen($this->vstr) ? ",":"").$value ;
+		$this->vstr=$this->vstr.(strlen($this->vstr) ? ",":"")."'".$value."'" ;
 	}
 	
+	function add_duplicate($add_dup)
+	{
+		$this->dstr=$this->dstr.(strlen($this->dstr) ? ", ":"").$add_dup ;
+		return $this->dstr ;
+	}
+
 	function get_query()
 	{
 		return "SELECT ".$this->sstr." FROM ".$this->fstr.(strlen($this->jstr) ? "  ".$this->jstr." " : "").(strlen($this->wstr) ? " WHERE ".$this->wstr : "") ;
@@ -69,7 +77,7 @@ class SqlQuery
 
 	function get_insert_query()
 	{
-		return "INSERT INTO ".$this->istr." (".$this->cstr.") VALUES (".$this->vstr.")" ;
+		return "INSERT INTO ".$this->istr." (".$this->cstr.") VALUES (".$this->vstr.")".(strlen($this->dstr) ? " ON DUPLICATE KEY UPDATE ".$this->dstr : "") ;
 	}
 }
 

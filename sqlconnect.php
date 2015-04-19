@@ -1,12 +1,32 @@
 <?php
 
+require_once 'foundation.php';
+
 // interface to work with any sql database
 abstract class SqlConnector
 {
 	abstract function QueryObject($query,$classname,$params) ; // returns one (first) result raw as object ;
 	abstract function SimpleQuery($query) ; 
-	// abstract function QueryObjectIterator($query,$classname,$params) ;
+	abstract function QueryObjectIterator($query) ;
 }
+
+
+class GofMySqliResultIterator extends GofIterator
+{
+	private $result ;
+	private $i ;
+
+	function __construct($result) 
+	{ 
+		$this->result=$result ; 
+	}
+	function First() { $this->i=0 ; }
+	function Next() { $this->result->data_seek(++$this->i) ; }
+	Function IsDone() { return $this->i >= $this->result->num_rows ; }
+	Function &Current() { return $this->result->fetch_object() ; }
+	Function Num() { return $this->result->num_rows ; }
+}
+
 
 // mysql implementation of SqlConnect 
 class MySqliConnector extends SqlConnector
@@ -25,7 +45,17 @@ class MySqliConnector extends SqlConnector
 		return $params ? $this->result->fetch_object($classname,$params) : $this->result->fetch_object($classname) ;
 	}
 
-	function SimpleQuery($query) { $this->result=$this->connection->query($query) ; } 
+	function SimpleQuery($query) 
+	{ 
+		if (!$this->connection->query($query))
+			echo $this->connection->error ; 
+	} 
+	
+	function QueryObjectIterator($query)
+	{
+		$this->result=$this->connection->query($query) ;
+		return new GofMySqliResultIterator($this->result) ;
+	}
 }
 
 
