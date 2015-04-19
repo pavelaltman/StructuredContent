@@ -117,6 +117,11 @@ class MultiDetailTable extends CompositeContent
 
 class AttributeTable extends CompositeContent
 {
+	private $display_child ;
+	
+	function DisplayChild() { return $display_child ; }
+	function SetDisplayChild($display_child) { $this->display_child=$display_child ; }
+	
 	function Accept($visitor)
 	{
 		return $visitor->VisitAttributeTable($this) ;
@@ -178,6 +183,16 @@ abstract class HtmlElementVisitor extends ContentVisitor
 // Visitor to get form elements from content structure
 class FormElementVisitor extends HtmlElementVisitor
 {
+	protected $settings ;
+	protected $sqlconnect ;
+	
+	function __construct($settings,$sqlconnect,$interface,$after=0) 
+	{ 
+		$this->settings=$settings ; 
+		$this->sqlconnect=$sqlconnect ; 
+		parent::__construct($interface,$after) ;
+	}
+	
 	function VisitString($string)
 	{
 		$ret="" ;
@@ -195,7 +210,10 @@ class FormElementVisitor extends HtmlElementVisitor
 		if (!$this->after)
 		{
 			$ret=$this->form_interface->Fieldset() ;
+
+			// $It=$this->sqlconnect->QueryObjectIterator("select ". from ".$this->settings->ContentTable()." order by ord desc") ;
 			$ret.=$this->form_interface->ListInput($content->GetName(),array()) ;
+
 			return $ret ;   
 		}
 		else
@@ -293,6 +311,11 @@ class RestoreElementVisitor extends ContentVisitor
 	{
 		$string->SetSize($this->object->Size) ;
 	}
+
+	function VisitAttributeTable($content)
+	{
+		$content->SetDisplayChild($this->object->DisplayChild) ;
+	}
 }
 
 
@@ -349,10 +372,10 @@ abstract class HtmlBuilder extends Builder
 // Builds html form to add new and query content 
 class FormBuilder extends HtmlBuilder
 {
-	function __construct($form_interface)
+	function __construct($settings,$sqlconnect,$form_interface)
 	{
-		$this->before_visitor=new FormElementVisitor($form_interface) ;
-		$this->after_visitor=new FormElementVisitor($form_interface,1) ;
+		$this->before_visitor=new FormElementVisitor($settings,$sqlconnect,$form_interface) ;
+		$this->after_visitor=new FormElementVisitor($settings,$sqlconnect,$form_interface,1) ;
 		parent::__construct($form_interface) ;
 	}
 	
@@ -555,15 +578,15 @@ class View
 		$restorer=new ContentRestorer($this->sqlconnect,$this->settings) ;
 		$content=$restorer->Restore() ;
 	
-		// print_r($content) ;
+		//print_r($content) ;
 	
 		// create form builder
-		$form_builder=new FormBuilder($this->form_interface) ;
+		$form_builder=new FormBuilder($this->settings,$this->sqlconnect,$this->form_interface) ;
 	
 		// create query builder
 		$query_builder=new QueryBuilder($this->settings) ;
 		
-		// create table head  builder
+		// create table head builder
 		$tablehead_builder=new TableHeadBuilder($this->form_interface) ;
 		
 		// create all_builders object, containing all needed builders
@@ -577,7 +600,7 @@ class View
 	    $view.=$this->form_interface->Table() ;	
 		$view.=$tablehead_builder->Get() ; // table head
 		
-		
+		// builder and parser to build rows
 		$row_builder=new TableRowBuilder($this->form_interface) ;
 		$row_parser=new ContentParser($row_builder) ;
 				
