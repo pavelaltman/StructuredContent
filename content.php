@@ -7,6 +7,17 @@ require_once 'query.php';
 require_once 'sqlconnect.php';
 require_once 'forminterface.php';
 
+class Settings
+{
+	private $prefix ;
+	private $content_table ;
+	
+	function __construct($pref,$tab) { $this->content_table=$tab ; $this->prefix=$pref ; }
+	function ContentTable() { return $this->prefix.$this->content_table ; }
+	function Prefix() { return $this->prefix ; }
+}
+
+
 abstract class Content
 {
 	abstract function Accept($visitor) ;
@@ -192,19 +203,27 @@ class FormElementVisitor extends ContentVisitor
 // Visitor to get sql query elements from content structure
 class QueryElementVisitor extends ContentVisitor
 {
-	private $query ;
+	private $query, $settings ;
 	
-	function __construct($query) { $this->query=$query ; }
+	function __construct($query,$settings) { $this->query=$query ; $this->settings=$settings ; }
 	
-	function VisitString($string) { $this->query->add_select($string->Par()->GetName().".".$string->GetName()) ; }
-	function VisitMasterTable($mastertable)	{ $this->query->add_from($mastertable->GetName()) ;}
+	function VisitString($string) 
+	{ 
+		$this->query->add_select($this->settings->Prefix().$string->Par()->GetName().".".$string->GetName()) ; 
+	}
+	function VisitMasterTable($mastertable)	
+	{ 
+		$this->query->add_from($this->settings->Prefix().$mastertable->GetName()) ;
+	}
 	function VisitMultiDetailTable($mdt)	
 	{ 
-		$this->query->add_join($mdt->GetName(),$mdt->GetName().'.'.$mdt->Par()->GetName().'='.$mdt->Par()->GetName().'.Id') ;
+		$this->query->add_join($this->settings->Prefix().$mdt->GetName(),
+				               $this->settings->Prefix().$mdt->GetName().'.'.$mdt->Par()->GetName().'='.$this->settings->Prefix().$mdt->Par()->GetName().'.Id') ;
 	}
 	function VisitAttributeTable($at)	
 	{ 
-		$this->query->add_join($at->GetName(),$at->GetName().'.Id='.$at->Par()->GetName().'.'.$at->GetName()) ;
+		$this->query->add_join($this->settings->Prefix().$at->GetName(),
+				               $this->settings->Prefix().$at->GetName().'.Id='.$this->settings->Prefix().$at->Par()->GetName().'.'.$at->GetName()) ;
 	}
 }
 
@@ -297,10 +316,10 @@ class QueryBuilder extends Builder
 	private $query ; // select query object to build
 	private $query_visitor ;
 
-	function __construct()
+	function __construct($settings)
 	{
 		$this->query=new SqlQuery();
-		$this->query_visitor=new QueryElementVisitor($this->query) ;
+		$this->query_visitor=new QueryElementVisitor($this->query,$settings) ;
 	}
 
 	function GetQuery() { return $this->query->get_query() ; }
@@ -315,12 +334,13 @@ class SaveBuilder extends Builder
 {
 	private $query ; // insert query object to execute
 	private $save_visitor ;
-	private $sqlconnect ;
+	private $sqlconnect, $settings ;
 	private $order ;
 
-	function __construct($connect)
+	function __construct($connect,$settings)
 	{
 		$this->sqlconnect=$connect ;
+		$this->settings=$settings ;
 		$this->query=new SqlQuery();
 		$this->save_visitor=new SaveElementVisitor($this->query) ;
 		$order=0 ;
@@ -332,7 +352,7 @@ class SaveBuilder extends Builder
 	function BuildElementStart($element) 
 	{
 		$this->query->Reset() ;
-		$this->query->add_insert("sc_content") ; 
+		$this->query->add_insert($this->settings->ContentTable()) ; 
 		
 		// adding common fields to insert query
 		$this->query->add_values("Name",$element->GetName()) ; 
@@ -386,16 +406,17 @@ class ContentParser
 
 class ContentRestorer
 {
-	private $sqlconnect ;
+	private $sqlconnect, $settings ;
 
-	function __construct($connect)
+	function __construct($connect,$settings) 
 	{
 		$this->sqlconnect=$connect ;
+		$this->settings=$settings ;
 	}
 	
 	function Restore()
 	{
-		$It=$this->sqlconnect->QueryObjectIterator("select * from sc_content order by ord desc") ;
+		$It=$this->sqlconnect->QueryObjectIterator("select * from ".$this->settings->ContentTable()." order by ord desc") ;
 
 		// creating visitor object to restore specific fields
 		$restore_visitor=new RestoreElementVisitor ;
@@ -423,6 +444,57 @@ class ContentRestorer
 	
 }
 
+
+// GoF "Facade" class to generate web page
+class View
+{
+	private $sqlconnect, $settings, $form_interface ;
+	
+	function __construct($connect,$settings,$form_interface)
+	{
+		$this->sqlconnect=$connect ;
+		$this->settings=$settings ;
+		$this->form_interface=$form_interface ;
+	}
+
+
+	function GetView()
+	{
+		// create restorer object and use it to restore content structure from sql table
+		$restorer=new ContentRestorer($this->sqlconnect,$this->settings) ;
+		$content=$restorer->Restore() ;
+	
+		// print_r($content) ;
+	
+		// create form builder
+		$form_builder=new FormBuilder($this->form_interface) ;
+	
+		// create query builder
+		$query_builder=new QueryBuilder($this->settings) ;
+	
+		// create all_builders object, containing all needed builders
+		$all_builders=new Builders(array($form_builder,$query_builder)) ;
+		$parser=new ContentParser($all_builders) ;
+	
+		// parse composite structure with all builders
+		$parser->Parse($content) ;
+	
+		$view=$form_builder->GetForm() ;
+	    // echo $query_builder->GetQuery() ;
+	
+		$outrows=$this->sqlconnect->QueryObjectIterator($query_builder->GetQuery()) ;
+		for ($outrows->First() ; !$outrows->IsDone() ; $outrows->Next())
+		{
+			$row=$outrows->Current() ;
+			$view.="<p>".$row->Word."</p>" ;
+		}
+		
+		return $view ;
+	
+	}
+
+}
+
 /*
 $content=new MasterTable('Words',array(
 		                     'Word' => new StringContent('Word',20),
@@ -443,34 +515,26 @@ $content=new MasterTable('Words',array(
 		           		) ;
 */
 
+// create settings
+$settings=new Settings("sc_", "_content") ;
+
 // create MySqli connection
 $db=new MySqliConnector('dollsfun.mysql.ukraine.com.ua','dollsfun_content','93hfkudn', 'dollsfun_content') ;
 
-// create restorer object and use it to restore content structure from sql table
-$restorer=new ContentRestorer($db) ;
-$content=$restorer->Restore() ;
-
-// print_r($content) ;
-
-// create form builder
+// create form interface and imlementation
 $imp=new HtmlFormImp() ;
 $form_interface=new FormInterface($imp) ;
-$form_builder=new FormBuilder($form_interface) ;
 
-// create query builder
-$query_builder=new QueryBuilder() ;
+$view=new View($db, $settings, $form_interface) ;
+echo $view->GetView() ;
 
-// create save builder
-// $save_builder=new SaveBuilder($db) ;
+/* temp code to update smth
+$defs=$db->QueryObjectIterator("select * from sc_Definitions") ;
+for ($defs->First() ; !$defs->IsDone() ; $defs->Next())
+{
+ $row=$defs->Current() ;
 
-// create all_builders object, containing all needed builders
-$all_builders=new Builders(array($form_builder,$query_builder)) ;
-$parser=new ContentParser($all_builders) ;
-
-// parse composite structure with all builders
-$parser->Parse($content) ;
-
-echo $form_builder->GetForm() ;
-echo $query_builder->GetQuery() ;
-
+ $db->SimpleQuery("update sc_Words set Topics=".$row->topic_id." where sc_Words.Id=".$row->Words) ;
+}
+*/
 ?>
