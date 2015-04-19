@@ -166,14 +166,18 @@ abstract class ContentVisitor
 } 
 
 
-// Visitor to get form elements from content structure
-class FormElementVisitor extends ContentVisitor
+// Visitor to get html elements from content structure
+abstract class HtmlElementVisitor extends ContentVisitor
 {
-	private $form_interface ;
-	private $after ;
+	protected $form_interface ;
+	protected $after ;
 	
 	function __construct($interface,$after=0) { $this->form_interface=$interface ; $this->after=$after ; }
-	
+}
+
+// Visitor to get form elements from content structure
+class FormElementVisitor extends HtmlElementVisitor
+{
 	function VisitString($string)
 	{
 		$ret="" ;
@@ -188,16 +192,52 @@ class FormElementVisitor extends ContentVisitor
 
 	function VisitAttributeTable($content) 
 	{
-		if ($this->after)
-			 return $this->form_interface->Fieldset_end() ;
-		else 
+		if (!$this->after)
 		{
 			$ret=$this->form_interface->Fieldset() ;
 			$ret.=$this->form_interface->ListInput($content->GetName(),array()) ;
 			return $ret ;   
 		}
+		else
+		    return $this->form_interface->Fieldset_end() ;
 	}
 }
+
+class TableHeadVisitor extends HtmlElementVisitor
+{
+	function VisitString($string)
+	{
+		$ret="" ;
+		if (!$this->after)
+		{
+			$ret.=$this->form_interface->TableHeadCol() ;
+			$ret.=$string->GetName() ;
+			$ret.=$this->form_interface->TableHeadCol_end() ;
+		}
+		return $ret ;
+	}
+}
+
+class TableRowVisitor extends HtmlElementVisitor
+{
+	private $row ;
+	
+	function SetRow($row) { $this->row=$row ; }
+	
+	function VisitString($string)
+	{
+		$ret="" ;
+		if (!$this->after)
+		{
+			$ret.=$this->form_interface->TableCol() ;
+			$name=$string->GetName() ;
+			$ret.=$this->row->$name ;
+			$ret.=$this->form_interface->TableCol_end() ;
+		}
+		return $ret ;
+	}
+}
+
 
 
 // Visitor to get sql query elements from content structure
@@ -284,30 +324,81 @@ class Builders extends Builder
 	function BuildElementEnd($el) { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildElementEnd($el) ; }
 }
 
-// Builds html form 
-class FormBuilder extends Builder
+
+// Builds some html 
+abstract class HtmlBuilder extends Builder
 {
-	private $form ; // Form object to build
-	private $form_visitor ;
-	private $form_visitor_after ;
-	private $form_interface ;
-	
+	protected $result ; // object to build
+	protected $before_visitor ;
+	protected $after_visitor ;
+	protected $output_interface ;
+
+	function __construct($output_interface)
+	{
+		$this->output_interface=$output_interface ;
+		$this->result="" ;
+	}
+
+	function Get() { return $this->result ; }
+
+	// implementing builder interface
+	function BuildElementStart($element) {	$this->result.=$element->Accept($this->before_visitor) ; }
+	function BuildElementEnd($element) { $this->result.=$element->Accept($this->after_visitor) ; }
+}
+
+// Builds html form to add new and query content 
+class FormBuilder extends HtmlBuilder
+{
 	function __construct($form_interface)
 	{
-		$this->form_visitor=new FormElementVisitor($form_interface) ;
-		$this->form_visitor_after=new FormElementVisitor($form_interface,1) ;
-		$this->form_interface=$form_interface ;
-		$this->form="" ;
+		$this->before_visitor=new FormElementVisitor($form_interface) ;
+		$this->after_visitor=new FormElementVisitor($form_interface,1) ;
+		parent::__construct($form_interface) ;
 	}
 	
-	function GetForm() { return $this->form ; }
-	
 	// implementing builder interface
-	function BuildStart() {	$this->form=$this->form_interface->Header() ; }
-	function BuildEnd() {	$this->form.=$this->form_interface->End() ; }
-	function BuildElementStart($form_element) {	$this->form.=$form_element->Accept($this->form_visitor) ; }
-	function BuildElementEnd($form_element) { $this->form.=$form_element->Accept($this->form_visitor_after) ; }
+	function BuildStart() { $this->result.=$this->output_interface->Header() ; }
+	function BuildEnd() { $this->result.=$this->output_interface->End() ; }
 }
+
+
+// Builds html table head to display content
+class TableHeadBuilder extends HtmlBuilder
+{
+	function __construct($form_interface)
+	{
+		$this->before_visitor=new TableHeadVisitor($form_interface) ;
+		$this->after_visitor=new TableHeadVisitor($form_interface,1) ;
+		parent::__construct($form_interface) ;
+	}
+
+	// implementing builder interface
+	function BuildStart() { $this->result.=$this->output_interface->TableRow() ; }
+	function BuildEnd() { $this->result.=$this->output_interface->TableRow_end() ; }
+}
+
+// Builds html table row to display content
+class TableRowBuilder extends HtmlBuilder
+{
+	function __construct($form_interface)
+	{
+		$this->before_visitor=new TableRowVisitor($form_interface) ;
+		$this->after_visitor=new TableRowVisitor($form_interface,1) ;
+		parent::__construct($form_interface) ;
+	}
+	
+	function SetRow($row) 
+	{
+		$this->before_visitor->SetRow($row) ;
+		$this->after_visitor->SetRow($row) ;
+		$this->result="" ;
+	}
+
+	// implementing builder interface
+	function BuildStart() { $this->result.=$this->output_interface->TableRow() ; }
+	function BuildEnd() { $this->result.=$this->output_interface->TableRow_end() ; }
+}
+
 
 
 // Builds select query to get content 
@@ -471,24 +562,35 @@ class View
 	
 		// create query builder
 		$query_builder=new QueryBuilder($this->settings) ;
-	
+		
+		// create table head  builder
+		$tablehead_builder=new TableHeadBuilder($this->form_interface) ;
+		
 		// create all_builders object, containing all needed builders
-		$all_builders=new Builders(array($form_builder,$query_builder)) ;
+		$all_builders=new Builders(array($form_builder,$query_builder,$tablehead_builder)) ;
 		$parser=new ContentParser($all_builders) ;
 	
 		// parse composite structure with all builders
 		$parser->Parse($content) ;
 	
-		$view=$form_builder->GetForm() ;
-	    // echo $query_builder->GetQuery() ;
-	
+		$view=$form_builder->Get() ; // form
+	    $view.=$this->form_interface->Table() ;	
+		$view.=$tablehead_builder->Get() ; // table head
+		
+		
+		$row_builder=new TableRowBuilder($this->form_interface) ;
+		$row_parser=new ContentParser($row_builder) ;
+				
 		$outrows=$this->sqlconnect->QueryObjectIterator($query_builder->GetQuery()) ;
 		for ($outrows->First() ; !$outrows->IsDone() ; $outrows->Next())
 		{
 			$row=$outrows->Current() ;
-			$view.="<p>".$row->Word."</p>" ;
+			$row_builder->SetRow($row) ;
+			$row_parser->Parse($content) ;
+			$view.=$row_builder->Get() ;
 		}
-		
+
+		$view.=$this->form_interface->Table_end() ;
 		return $view ;
 	
 	}

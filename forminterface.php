@@ -10,6 +10,15 @@ abstract class FormImp
 	abstract function Fieldset_end() ;
 	abstract function Paragraf() ;
 	abstract function Paragraf_end() ;
+
+	abstract function Table() ;
+	abstract function Table_end() ;
+	abstract function TableRow() ;
+	abstract function TableRow_end() ;
+	abstract function TableCol() ;
+	abstract function TableCol_end() ;
+	abstract function TableHeadCol() ;
+	abstract function TableHeadCol_end() ;
 }
 
 class HtmlFormImp extends FormImp
@@ -30,6 +39,16 @@ class HtmlFormImp extends FormImp
 	function Fieldset_end() { return '</fieldset>' ; } 
 	function Paragraf() { return '<p>' ; } 
 	function Paragraf_end() { return '</p>' ; } 
+
+	function Table() { return "<table border=\"1\">" ; }
+	function Table_end() { return "</table>" ; }
+	function TableRow() { return "<tr>" ; }
+	function TableRow_end() { return "</tr>" ; }
+	function TableCol() { return "<td>" ; }
+	function TableCol_end() { return "</td>" ; }
+	function TableHeadCol() { return "<th>" ; }
+	function TableHeadCol_end() { return "</th>" ; }
+	
 }
 
 class FormInterface
@@ -45,6 +64,15 @@ class FormInterface
 	function Paragraf_end() { return $this->imp->Paragraf_end() ; }
 	function TextInput($name,$size) { return $this->imp->TextInput($name,$size) ; }
 	function ListInput($name,$opt_arr) { return $this->imp->ListInput($name,$opt_arr) ; }
+
+	function Table() { return $this->imp->Table() ; }
+	function Table_end() { return $this->imp->Table_end() ; }
+	function TableRow() { return $this->imp->TableRow() ; }
+	function TableRow_end() { return $this->imp->TableRow_end() ; }
+	function TableCol() { return $this->imp->TableCol() ; }
+	function TableCol_end() { return $this->imp->TableCol_end() ; }
+	function TableHeadCol() { return $this->imp->TableHeadCol() ; }
+	function TableHeadCol_end() { return $this->imp->TableHeadCol_end() ; }
 }
 
 
