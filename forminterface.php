@@ -1,11 +1,13 @@
 <?php
 
+require_once 'foundation.php';
+
 abstract class FormImp
 {
 	abstract function Header($url) ;
 	abstract function End() ;
 	abstract function TextInput($name,$size) ;
-	abstract function ListInput($name,$opt_arr) ;
+	abstract function ListInput($name,$opt_iter,$value_label,$name_label,$selected_value,$default_name) ;
 	abstract function Fieldset() ;
 	abstract function Fieldset_end() ;
 	abstract function Paragraf() ;
@@ -23,14 +25,20 @@ abstract class FormImp
 
 class HtmlFormImp extends FormImp
 {
-	function Header($url) { return '<form action="'.$url.'">' ; }
-	function End() { return '</form>' ; } 
+	function Header($url) { return '<form action="'.$url.'" method="post">' ; }
+	function End() { return '<p><input type="submit"/></p></form>' ; } 
 	function TextInput($name,$size) { return $name.' <input type="'.'text" name="'.$name.'" size="'.$size.'">' ; }
 
-	function ListInput($name,$opt_arr) 
+	function ListInput($name,$opt_iter,$value_label,$name_label,$selected_value,$default_name) 
 	{ 
-		$ret='<select name="'.$name.'"> <option value="0"> '.$name.'</option>' ;
-		// insert loop here
+		$ret='<select name="'.$name.'"> <option value="0"> '.$default_name.'</option>' ;
+		
+		for($opt_iter->First() ; !$opt_iter->IsDone() ; $opt_iter->Next())
+		{
+			$row=$opt_iter->Current() ;
+			$ret.='<option '.($row->$value_label==$selected_value ? 'selected' : '').' value="'.$row->$value_label.'">'.$row->$name_label.'</option>' ;
+		}
+		
 		$ret.='</select>' ;
 		return $ret ; 
 	}
@@ -56,14 +64,15 @@ class FormInterface
 	private $imp ;
 
 	function __construct($imp) { $this->imp=$imp ; }
-	function Header() { return $this->imp->Header("/") ; }
+	function Header() { return $this->imp->Header("") ; }
 	function End() { return $this->imp->End() ; }
 	function Fieldset() { return $this->imp->Fieldset() ; }
 	function Fieldset_end() { return $this->imp->Fieldset_end() ; }
 	function Paragraf() { return $this->imp->Paragraf() ; }
 	function Paragraf_end() { return $this->imp->Paragraf_end() ; }
 	function TextInput($name,$size) { return $this->imp->TextInput($name,$size) ; }
-	function ListInput($name,$opt_arr) { return $this->imp->ListInput($name,$opt_arr) ; }
+	function ListInput($name,$opt_iter,$value_label,$name_label,$selected_value,$default_name) 
+            { return $this->imp->ListInput($name,$opt_iter,$value_label,$name_label,$selected_value,$default_name) ; }
 
 	function Table() { return $this->imp->Table() ; }
 	function Table_end() { return $this->imp->Table_end() ; }

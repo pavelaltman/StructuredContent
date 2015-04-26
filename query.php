@@ -4,6 +4,7 @@ class SqlQuery
 	private $sstr, // columns to select 
 			$fstr, // tables to select from 
 			$wstr, // where clause
+			$ostr, // order by clause
 			$jstr, // left join clause 
 			$istr, // table to insert 
 			$cstr, // columns to insert 
@@ -17,6 +18,7 @@ class SqlQuery
 		$this->fstr="" ; 
 		$this->jstr="" ; 
 		$this->wstr="" ; 
+		$this->ostr="" ; 
 		$this->istr="" ; 
 		$this->cstr="" ; 
 		$this->vstr="" ;
@@ -39,7 +41,13 @@ class SqlQuery
 		$this->fstr=$this->fstr.(strlen($this->fstr) ? ",":"").$add_table ;
 		return $this->fstr ;
 	}
-
+	
+	function add_order($add_fld)
+	{
+		$this->ostr=$this->ostr.(strlen($this->ostr) ? ",":"").$add_fld ;
+		return $this->ostr ;
+	}
+	
 	function add_join($add_table,$add_condition)
 	{
 		$this->jstr=$this->jstr." LEFT JOIN ".$add_table." ON ".$add_condition ;
@@ -72,7 +80,7 @@ class SqlQuery
 
 	function get_query()
 	{
-		return "SELECT ".$this->sstr." FROM ".$this->fstr.(strlen($this->jstr) ? "  ".$this->jstr." " : "").(strlen($this->wstr) ? " WHERE ".$this->wstr : "") ;
+		return "SELECT ".$this->sstr." FROM ".$this->fstr.(strlen($this->jstr) ? "  ".$this->jstr." " : "").(strlen($this->wstr) ? " WHERE ".$this->wstr : "").(strlen($this->ostr) ? " ORDER BY ".$this->ostr : "") ;
 	}
 
 	function get_insert_query()

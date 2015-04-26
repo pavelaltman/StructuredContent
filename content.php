@@ -7,15 +7,22 @@ require_once 'query.php';
 require_once 'sqlconnect.php';
 require_once 'forminterface.php';
 
+// application settings, i.e. table names
 class Settings
 {
 	private $prefix ;
 	private $content_table ;
+	private $state_table ;
 	
-	function __construct($pref,$tab) { $this->content_table=$tab ; $this->prefix=$pref ; }
+	function __construct($pref,$cont_tab,$stat_tab) 
+	{ 
+		$this->content_table=$cont_tab ; $this->state_table=$stat_tab ; $this->prefix=$pref ; 
+	}
 	function ContentTable() { return $this->prefix.$this->content_table ; }
+	function StateTable() { return $this->prefix.$this->state_table ; }
 	function Prefix() { return $this->prefix ; }
 }
+
 
 
 abstract class Content
@@ -92,6 +99,8 @@ abstract class CompositeContent extends Content
 		$this->children[$newname]=$newchild ;
 		unset($this->children[$name]) ;
 	}
+	function GetChild($name) { return $this->children[$name] ; }	
+	
 	
 	function Accept($visitor) 
 	{ 
@@ -117,10 +126,17 @@ class MultiDetailTable extends CompositeContent
 
 class AttributeTable extends CompositeContent
 {
-	private $display_child ;
+	private $display_child , $filtered_by_child , $filters_output , $current_value ;
 	
-	function DisplayChild() { return $display_child ; }
+	function DisplayChild() { return $this->display_child ; }
 	function SetDisplayChild($display_child) { $this->display_child=$display_child ; }
+	function FilteredByChild() { return $this->filtered_by_child ; }
+	function CurrentValue() { return $this->current_value ; }
+	
+	function SetFilteredByChild($filtered_by_child) { $this->filtered_by_child=$filtered_by_child ; }
+	function FiltersOutput() { return $this->filters_output ; }
+	function SetFiltersOutput($filters_output) { $this->filters_output=$filters_output ; }
+	function SetCurrentValue($current_value) { $this->current_value=$current_value ; }
 	
 	function Accept($visitor)
 	{
@@ -171,6 +187,32 @@ abstract class ContentVisitor
 } 
 
 
+class POSTElementVisitor extends ContentVisitor
+{
+	protected $settings ;
+	protected $sqlconnect ;
+	
+	function __construct($settings,$sqlconnect) 
+	{ 
+		$this->settings=$settings ; 
+		$this->sqlconnect=$sqlconnect ;
+	}
+		
+	function VisitAttributeTable($content)
+	{
+		$content->SetCurrentValue($_POST[$content->GetName()]) ;
+		
+		// echo "<p>".$content->GetName() ; print_r($_POST) ; echo "<p/>" ;
+		
+		$query=new SqlQuery() ;
+		$query->add_insert($this->settings->StateTable()) ;
+		$query->add_values("Name",$content->GetName()) ;
+		$query->add_values("Value",$content->CurrentValue()) ;
+		$query->add_duplicate("Value=".$content->CurrentValue()) ;
+		$this->sqlconnect->SimpleQuery($query->get_insert_query()) ;
+	}
+}
+
 // Visitor to get html elements from content structure
 abstract class HtmlElementVisitor extends ContentVisitor
 {
@@ -198,9 +240,9 @@ class FormElementVisitor extends HtmlElementVisitor
 		$ret="" ;
 		if (!$this->after)
 		{
-			$ret.=$this->form_interface->Paragraf() ;
+			//$ret.=$this->form_interface->Paragraf() ;
 			$ret.=$this->form_interface->TextInput($string->GetName(),$string->GetSize()) ;
-			$ret.=$this->form_interface->Paragraf_end() ;
+			//$ret.=$this->form_interface->Paragraf_end() ;
 		}
 		return $ret ;
 	}
@@ -211,8 +253,22 @@ class FormElementVisitor extends HtmlElementVisitor
 		{
 			$ret=$this->form_interface->Fieldset() ;
 
-			// $It=$this->sqlconnect->QueryObjectIterator("select ". from ".$this->settings->ContentTable()." order by ord desc") ;
-			$ret.=$this->form_interface->ListInput($content->GetName(),array()) ;
+			// fill list with attribute teable rows
+			$query="select Id,".$content->DisplayChild()." from ".$this->settings->Prefix().$content->GetName() ;
+			
+			// add child filter if needed
+			$chldnm=$content->FilteredByChild() ;
+			if (strlen($chldnm))
+			{
+			 $chld=$content->GetChild($chldnm) ;
+			 $query.=" where ".$chldnm."=".$chld->CurrentValue() ;
+			 // echo "<br/>".$chldnm."<br/>".$query ;
+			}
+			
+			
+			$It=$this->sqlconnect->QueryObjectIterator($query) ;
+			$selected= $content->CurrentValue() ;
+			$ret.=$this->form_interface->ListInput($content->GetName(),$It,"Id",$content->DisplayChild(),$selected,$content->DisplayChild()) ;
 
 			return $ret ;   
 		}
@@ -263,7 +319,10 @@ class QueryElementVisitor extends ContentVisitor
 {
 	private $query, $settings ;
 	
-	function __construct($query,$settings) { $this->query=$query ; $this->settings=$settings ; }
+	function __construct($query,$settings) 
+	{ 
+		$this->query=$query ; $this->settings=$settings ; 
+	}
 	
 	function VisitString($string) 
 	{ 
@@ -282,6 +341,14 @@ class QueryElementVisitor extends ContentVisitor
 	{ 
 		$this->query->add_join($this->settings->Prefix().$at->GetName(),
 				               $this->settings->Prefix().$at->GetName().'.Id='.$this->settings->Prefix().$at->Par()->GetName().'.'.$at->GetName()) ;
+		
+		// if this attribute table has current value, then adding filter 
+		if ($at->FiltersOutput())
+		{
+			$value=$at->CurrentValue() ;
+			if ($value)
+				$this->query->add_where($this->settings->Prefix().$at->Par()->GetName().'.'.$at->GetName().'='.$value) ;
+		}
 	}
 }
 
@@ -297,13 +364,23 @@ class SaveElementVisitor extends ContentVisitor
 	{ 
 		$this->query->add_values("Size",$string->GetSize()) ; 
 	}
+
+	function VisitAttributeTable($content) 
+	{ 
+		$this->query->add_values("DisplayChild",$content->DisplayChild()) ; 
+		$this->query->add_values("FilteredByChild",$content->FilteredByChild()) ; 
+		$this->query->add_values("FiltersOutput",$content->FiltersOutput()) ; 
+	}
 }
+	
 
-
-// visitor to add type-specific fields to insert query
+// visitor to copy type-specific fields from untyped object to content element
 class RestoreElementVisitor extends ContentVisitor
 {
 	private $object ;
+	private $post_request ;
+	
+	function __construct($post) { $this->post_request=$post ; }
 
 	function SetObject($object) { $this->object=$object ; }
 
@@ -315,6 +392,12 @@ class RestoreElementVisitor extends ContentVisitor
 	function VisitAttributeTable($content)
 	{
 		$content->SetDisplayChild($this->object->DisplayChild) ;
+		$content->SetFilteredByChild($this->object->FilteredByChild) ;
+		$content->SetFiltersOutput($this->object->FiltersOutput) ;
+		
+		if (!$this->post_request)
+			$content->SetCurrentValue($this->object->Value) ;
+				
 	}
 }
 
@@ -325,8 +408,8 @@ abstract class Builder
 {
 	function BuildStart() {}
 	function BuildEnd() {}
-	function BuildElementStart($form_element) {}
-	function BuildElementEnd($form_element) {}
+	function BuildElementStart($element) {}
+	function BuildElementEnd($element) {}
 }
 
 // array of builders to build several objects at one parse
@@ -422,6 +505,21 @@ class TableRowBuilder extends HtmlBuilder
 	function BuildEnd() { $this->result.=$this->output_interface->TableRow_end() ; }
 }
 
+
+
+// Adds filter information to content structure from POST and stores it in database 
+class POSTBuilder extends Builder
+{
+	private $post_visitor ;
+
+	function __construct($settings,$connect)
+	{
+		$this->post_visitor=new POSTElementVisitor($settings,$connect) ;
+	}
+
+	// implementing builder interface
+	function BuildElementStart($element) {	$element->Accept($this->post_visitor) ; }
+}
 
 
 // Builds select query to get content 
@@ -520,17 +618,28 @@ class ContentParser
 
 class ContentRestorer
 {
-	private $sqlconnect, $settings ;
+	private $sqlconnect, $settings, $post_request ;
 
-	function __construct($connect,$settings) 
+	function __construct($connect,$settings,$post) 
 	{
 		$this->sqlconnect=$connect ;
 		$this->settings=$settings ;
+		$this->post_request=$post ;
 	}
 	
 	function Restore()
 	{
-		$It=$this->sqlconnect->QueryObjectIterator("select * from ".$this->settings->ContentTable()." order by ord desc") ;
+		$query=new SqlQuery() ;
+		$query->add_select($this->settings->ContentTable().".*") ;
+		$query->add_from($this->settings->ContentTable()) ;
+		$query->add_order("ord desc") ;
+		if (!$this->post_request)
+		{
+			$query->add_select("Value") ;
+			$query->add_join($this->settings->StateTable(),$this->settings->StateTable().".Name=".$this->settings->ContentTable().".Name") ;
+		}	
+		  
+		$It=$this->sqlconnect->QueryObjectIterator($query->get_query()) ;
 
 		// creating visitor object to restore specific fields
 		$restore_visitor=new RestoreElementVisitor ;
@@ -541,7 +650,15 @@ class ContentRestorer
 			$row=$It->Current() ;
 			
 			$classname=$row->ClassName ;
-			$chldrn=array_slice($stack,0,$row->Chldrn) ; // get sub-array of children from stack 
+			
+			$_chldrn=array_slice($stack,0,$row->Chldrn) ; // get sub-array of children from stack 
+
+			// changing numeric keys to names 
+			$chldrn=array() ;
+			foreach($_chldrn as $key => $value)
+			{
+				$chldrn[$value->GetName()]=$value ;
+			}	
 			
 			// create object of specific class but with generic constructor
 			$current_obj=new $classname($row->Name,$chldrn) ; 
@@ -574,12 +691,16 @@ class View
 
 	function GetView()
 	{
+		$post= ($_SERVER['REQUEST_METHOD']=='POST') ;
+		
 		// create restorer object and use it to restore content structure from sql table
-		$restorer=new ContentRestorer($this->sqlconnect,$this->settings) ;
+		$restorer=new ContentRestorer($this->sqlconnect,$this->settings,$post) ;
 		$content=$restorer->Restore() ;
 	
+		//echo "content: " ;
 		//print_r($content) ;
-	
+
+		
 		// create form builder
 		$form_builder=new FormBuilder($this->settings,$this->sqlconnect,$this->form_interface) ;
 	
@@ -589,11 +710,21 @@ class View
 		// create table head builder
 		$tablehead_builder=new TableHeadBuilder($this->form_interface) ;
 		
+		$builders_array=array($form_builder,$query_builder,$tablehead_builder) ;
+		if ($post)
+		{
+			$post_builder=new POSTBuilder($this->settings, $this->sqlconnect) ;
+			$post_parser=new ContentParser($post_builder) ;
+		    $post_parser->Parse($content) ;
+		}
+		
+		// print_r($builders_array) ;
+		
 		// create all_builders object, containing all needed builders
-		$all_builders=new Builders(array($form_builder,$query_builder,$tablehead_builder)) ;
-		$parser=new ContentParser($all_builders) ;
-	
+		$all_builders=new Builders($builders_array) ;
+		
 		// parse composite structure with all builders
+		$parser=new ContentParser($all_builders) ;
 		$parser->Parse($content) ;
 	
 		$view=$form_builder->Get() ; // form
@@ -614,8 +745,8 @@ class View
 		}
 
 		$view.=$this->form_interface->Table_end() ;
+		
 		return $view ;
-	
 	}
 
 }
@@ -641,7 +772,7 @@ $content=new MasterTable('Words',array(
 */
 
 // create settings
-$settings=new Settings("sc_", "_content") ;
+$settings=new Settings("sc_", "_content","_state") ;
 
 // create MySqli connection
 $db=new MySqliConnector('dollsfun.mysql.ukraine.com.ua','dollsfun_content','93hfkudn', 'dollsfun_content') ;
