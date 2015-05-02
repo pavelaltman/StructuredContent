@@ -8,6 +8,7 @@ abstract class SqlConnector
 	abstract function QueryObject($query,$classname,$params) ; // returns one (first) result raw as object ;
 	abstract function SimpleQuery($query) ; 
 	abstract function QueryObjectIterator($query) ;
+	abstract function InsertId() ;
 }
 
 
@@ -56,6 +57,8 @@ class MySqliConnector extends SqlConnector
 		$this->result=$this->connection->query($query) ;
 		return new GofMySqliResultIterator($this->result) ;
 	}
+	
+	function InsertId() { return $this->connection->insert_id ; }
 }
 
 
