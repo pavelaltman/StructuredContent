@@ -228,23 +228,23 @@ abstract class ContentVisitorBeforeAfter extends ContentVisitor
 }
 
 
-// defines weather to insert data to table before processing children or after 
-class InsertVisitor extends ContentVisitorBeforeAfter
+trait SqlConnectable
 {
-		
+	protected $settings ;
+	protected $sqlconnect ;
+
+	function SqlConnectableSet($settings,$sqlconnect)
+	{
+		$this->settings=$settings ;
+		$this->sqlconnect=$sqlconnect ;
+	}
+	function __construct($settings,$sqlconnect) { $this->SqlConnectableSet($settings,$sqlconnect) ; }
 }
 
 class POSTElementVisitor extends ContentVisitor
 {
-	protected $settings ;
-	protected $sqlconnect ;
+	use SqlConnectable ;
 	
-	function __construct($settings,$sqlconnect) 
-	{ 
-		$this->settings=$settings ; 
-		$this->sqlconnect=$sqlconnect ;
-	}
-		
 	function VisitAttributeTable($content)
 	{
 		// setting current value from post request
@@ -278,13 +278,11 @@ class HtmlElementVisitor extends ContentVisitorBeforeAfter
 // Visitor to get form elements from content structure
 class FormElementVisitor extends HtmlElementVisitor
 {
-	protected $settings ;
-	protected $sqlconnect ;
+	use SqlConnectable ;
 	
 	function __construct($settings,$sqlconnect,$interface,$after=0) 
 	{ 
-		$this->settings=$settings ; 
-		$this->sqlconnect=$sqlconnect ; 
+		$this->SqlConnectableSet($settings,$sqlconnect) ;
 		parent::__construct($interface,$after) ;
 	}
 	
@@ -595,15 +593,15 @@ class QueryBuilder extends Builder
 // Builds insert query to save content structure for every element and executes it
 class SaveBuilder extends Builder
 {
+	use SqlConnectable ;
+	
 	private $query ; // insert query object to execute
 	private $save_visitor ;
-	private $sqlconnect, $settings ;
 	private $order ;
 
 	function __construct($settings,$connect)
 	{
-		$this->sqlconnect=$connect ;
-		$this->settings=$settings ;
+		$this->SqlConnectableSet($settings, $connect) ;
 		$this->query=new SqlQuery();
 		$this->save_visitor=new SaveElementVisitor($this->query) ;
 		$order=0 ;
@@ -639,15 +637,8 @@ class SaveBuilder extends Builder
 // inserts data into user tables from POST request 
 class InsertBuilder extends Builder
 {
-	private $sqlconnect, $settings ;
-
-	function __construct($settings,$connect)
-	{
-		$this->sqlconnect=$connect ;
-		$this->settings=$settings ;
-	}
-
-
+	use SqlConnectable ;
+	
 	// inserts data to one user table, asumes dependent tables were processed before
 	function BuildElementStart($element)
 	{
@@ -668,6 +659,7 @@ class InsertBuilder extends Builder
 			if ($element->DependsFromParent())
 				$query->add_values($element->Par()->GetName(), $_POST[$element->Par()->GetName()]) ;
 				
+			// insert data and then add Id to $_POST
 			$this->sqlconnect->SimpleQuery($query->get_insert_query()) ;
 			$_POST[$element->GetName()]=$this->sqlconnect->InsertId() ;
 		}
@@ -732,12 +724,13 @@ class ContentParser
 
 class ContentRestorer
 {
-	private $sqlconnect, $settings, $post_request ;
+	use SqlConnectable ;
+	
+	private $post_request ;
 
 	function __construct($settings,$connect,$post) 
 	{
-		$this->sqlconnect=$connect ;
-		$this->settings=$settings ;
+		$this->SqlConnectableSet($settings, $connect) ;
 		$this->post_request=$post ;
 	}
 	
@@ -793,12 +786,13 @@ class ContentRestorer
 // GoF "Facade" class to generate web page
 class View
 {
-	private $sqlconnect, $settings, $form_interface ;
+	use SqlConnectable ;
+	
+	private $form_interface ;
 	
 	function __construct($settings,$connect,$form_interface)
 	{
-		$this->sqlconnect=$connect ;
-		$this->settings=$settings ;
+		$this->SqlConnectableSet($settings, $connect) ;
 		$this->form_interface=$form_interface ;
 	}
 
