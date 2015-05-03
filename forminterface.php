@@ -4,8 +4,8 @@ require_once 'foundation.php';
 
 abstract class FormImp
 {
-	abstract function Header($url) ;
-	abstract function End() ;
+	abstract function Header($url,$id) ;
+	abstract function End($submit_name) ;
 	abstract function TextInput($name,$size) ;
 	abstract function ListInput($name,$opt_iter,$value_label,$name_label,$selected_value,$default_name) ;
 	abstract function Fieldset() ;
@@ -21,12 +21,14 @@ abstract class FormImp
 	abstract function TableCol_end() ;
 	abstract function TableHeadCol() ;
 	abstract function TableHeadCol_end() ;
+	
+	abstract function Button($form,$text,$name,$value) ;
 }
 
 class HtmlFormImp extends FormImp
 {
-	function Header($url) { return '<form action="'.$url.'" method="post">' ; }
-	function End() { return '<p><input type="submit"/></p></form>' ; } 
+	function Header($url,$id) { return '<form action="'.$url.'" id="'.$id.'" method="post">' ; }
+	function End($submit_name) { return '<p><input type="submit" name="'.$submit_name.'"/></p></form>' ; } 
 	function TextInput($name,$size) { return $name.' <input type="'.'text" name="'.$name.'" size="'.$size.'">' ; }
 
 	function ListInput($name,$opt_iter,$value_label,$name_label,$selected_value,$default_name) 
@@ -57,6 +59,10 @@ class HtmlFormImp extends FormImp
 	function TableHeadCol() { return "<th>" ; }
 	function TableHeadCol_end() { return "</th>" ; }
 	
+	function Button($form,$text,$name,$value)
+	{
+		return '<button form="'.$form.'" name="'.$name.'" value="'.$value.'">'.$text.'</button>' ;
+	}
 }
 
 class FormInterface
@@ -64,8 +70,8 @@ class FormInterface
 	private $imp ;
 
 	function __construct($imp) { $this->imp=$imp ; }
-	function Header() { return $this->imp->Header("") ; }
-	function End() { return $this->imp->End() ; }
+	function Header($id) { return $this->imp->Header("",$id) ; }
+	function End($sn) { return $this->imp->End($sn) ; }
 	function Fieldset() { return $this->imp->Fieldset() ; }
 	function Fieldset_end() { return $this->imp->Fieldset_end() ; }
 	function Paragraf() { return $this->imp->Paragraf() ; }
@@ -82,6 +88,7 @@ class FormInterface
 	function TableCol_end() { return $this->imp->TableCol_end() ; }
 	function TableHeadCol() { return $this->imp->TableHeadCol() ; }
 	function TableHeadCol_end() { return $this->imp->TableHeadCol_end() ; }
+	function Button($form,$text,$name,$value) { return $this->imp->Button($form,$text,$name,$value); }
 }
 
 

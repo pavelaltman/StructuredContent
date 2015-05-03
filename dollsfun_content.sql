@@ -3,7 +3,7 @@
 -- http://www.phpmyadmin.net
 --
 -- Хост: dollsfun.mysql.ukraine.com.ua
--- Время создания: Апр 25 2015 г., 17:38
+-- Время создания: Май 02 2015 г., 13:48
 -- Версия сервера: 5.1.72-cll-lve
 -- Версия PHP: 5.2.17
 
@@ -29,12 +29,13 @@ SET time_zone = "+00:00";
 CREATE TABLE IF NOT EXISTS `sc_Definitions` (
   `Id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `Words` int(10) unsigned NOT NULL DEFAULT '0',
-  `Parts` tinyint(2) unsigned NOT NULL,
+  `Parts` int(10) unsigned NOT NULL,
   `Definition` text NOT NULL,
   `Example` text NOT NULL,
   PRIMARY KEY (`Id`),
-  UNIQUE KEY `word_id` (`Words`)
-) ENGINE=MyISAM  DEFAULT CHARSET=utf8 AUTO_INCREMENT=56 ;
+  KEY `Definitions_Parts` (`Parts`),
+  KEY `Definitions_Words` (`Words`)
+) ENGINE=InnoDB  DEFAULT CHARSET=utf8 AUTO_INCREMENT=57 ;
 
 --
 -- Дамп данных таблицы `sc_Definitions`
@@ -66,7 +67,6 @@ INSERT INTO `sc_Definitions` (`Id`, `Words`, `Parts`, `Definition`, `Example`) V
 (31, 57, 2, 'damaging, harmful', 'There is no evidence that eating microwaved foods is detrimental to humans or animals'),
 (32, 58, 2, 'a strong feeling of dislike, opposition, repugnance, or antipathy (usually followed by to)', 'a strong aversion to snakes and spiders'),
 (33, 59, 6, 'to go on a walking excursion or expedition, hike', 'By day he tramps the streets asking for money'),
-(34, 0, 6, 'disgustingly or completely dirty', 'At night he finds a filthy corner '),
 (35, 60, 5, 'disgustingly or completely dirty', 'At night he finds a filthy corner'),
 (36, 61, 5, 'old, thin (of clothes)', 'wraped in a threadbare coat he found in a bin'),
 (37, 62, 6, 'to be qualified for, or have a claim to (reward, assistance, punishment, etc.) because of actions, qualities, or situation', 'These kids deserve a warm bed and a warm meal'),
@@ -83,11 +83,12 @@ INSERT INTO `sc_Definitions` (`Id`, `Words`, `Parts`, `Definition`, `Example`) V
 (48, 73, 2, 'an artificial variety of a species of domestic animal or cultivated plant', 'newly developed strains of coffee trees '),
 (49, 74, 2, 'a period of dry weather, especially a long one that is injurious to crops', 'Australia is struggling to cope with the consequences of a devastating drought'),
 (50, 75, 5, 'highly objectionable or offensive, odious', 'obnoxious behavior'),
-(51, 76, 0, 'an advance from one place, position, or situation to another without progressing through all or any of the places or stages in between', 'a leapfrog from bank teller to vice president in one short year'),
+(51, 76, 2, 'an advance from one place, position, or situation to another without progressing through all or any of the places or stages in between', 'a leapfrog from bank teller to vice president in one short year'),
 (52, 78, 5, 'doubtful; questionable', 'An early decision on this is iffy'),
 (53, 79, 5, 'of the third order, rank, stage, formation, etc., third', 'tertiary education'),
 (54, 80, 5, 'not readily handled or managed in use or action, as from size, shape, or weight', 'unwieldy task'),
-(55, 81, 6, 'study intensively for a short time', 'to cram for exam');
+(55, 81, 6, 'study intensively for a short time', 'to cram for exam'),
+(56, 82, 9, 'definition', 'example');
 
 -- --------------------------------------------------------
 
@@ -96,10 +97,10 @@ INSERT INTO `sc_Definitions` (`Id`, `Words`, `Parts`, `Definition`, `Example`) V
 --
 
 CREATE TABLE IF NOT EXISTS `sc_Parts` (
-  `Id` tinyint(2) NOT NULL AUTO_INCREMENT,
+  `Id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `Part` char(12) NOT NULL,
   PRIMARY KEY (`Id`)
-) ENGINE=MyISAM  DEFAULT CHARSET=ucs2 AUTO_INCREMENT=9 ;
+) ENGINE=InnoDB  DEFAULT CHARSET=ucs2 AUTO_INCREMENT=10 ;
 
 --
 -- Дамп данных таблицы `sc_Parts`
@@ -113,7 +114,8 @@ INSERT INTO `sc_Parts` (`Id`, `Part`) VALUES
 (5, 'adjective'),
 (6, 'verb'),
 (7, 'preposition'),
-(8, 'pronoun');
+(8, 'pronoun'),
+(9, 'part');
 
 -- --------------------------------------------------------
 
@@ -122,23 +124,24 @@ INSERT INTO `sc_Parts` (`Id`, `Part`) VALUES
 --
 
 CREATE TABLE IF NOT EXISTS `sc_Themes` (
-  `Id` int(11) NOT NULL AUTO_INCREMENT,
+  `Id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `Theme` char(50) NOT NULL,
   PRIMARY KEY (`Id`),
   UNIQUE KEY `theme` (`Theme`)
-) ENGINE=MyISAM  DEFAULT CHARSET=utf8 AUTO_INCREMENT=7 ;
+) ENGINE=InnoDB  DEFAULT CHARSET=utf8 AUTO_INCREMENT=8 ;
 
 --
 -- Дамп данных таблицы `sc_Themes`
 --
 
 INSERT INTO `sc_Themes` (`Id`, `Theme`) VALUES
-(1, 'Health and well being'),
-(2, 'Trends'),
-(3, 'Ethics and social responsibility'),
-(4, 'You and your money'),
 (5, 'Education'),
-(6, 'Vocabulary advanced');
+(3, 'Ethics and social responsibility'),
+(1, 'Health and well being'),
+(7, 'theme'),
+(2, 'Trends'),
+(6, 'Vocabulary advanced'),
+(4, 'You and your money');
 
 -- --------------------------------------------------------
 
@@ -147,32 +150,29 @@ INSERT INTO `sc_Themes` (`Id`, `Theme`) VALUES
 --
 
 CREATE TABLE IF NOT EXISTS `sc_Topics` (
-  `Id` tinyint(4) NOT NULL AUTO_INCREMENT,
-  `Themes` tinyint(4) NOT NULL,
+  `Id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `Themes` int(10) unsigned NOT NULL,
   `Topic` char(50) NOT NULL,
   PRIMARY KEY (`Id`),
-  UNIQUE KEY `topic` (`Topic`)
-) ENGINE=MyISAM  DEFAULT CHARSET=utf8 AUTO_INCREMENT=30 ;
+  KEY `Topics_Themes` (`Themes`)
+) ENGINE=InnoDB  DEFAULT CHARSET=utf8 AUTO_INCREMENT=31 ;
 
 --
 -- Дамп данных таблицы `sc_Topics`
 --
 
 INSERT INTO `sc_Topics` (`Id`, `Themes`, `Topic`) VALUES
-(7, 0, 'animals'),
-(4, 0, 'finance'),
+(14, 2, '36. Gadgets'),
 (16, 1, '46. The alternative way'),
 (20, 1, '51. Mind over body'),
-(14, 2, '36. Gadgets'),
-(19, 0, 'delete this'),
-(22, 0, 'delete too'),
 (23, 1, '50. Health education'),
 (24, 3, '38. Charity'),
 (25, 3, '40. Fair Trade'),
 (26, 4, '42. Consumer issues'),
 (27, 4, '43. Economic issues'),
 (28, 5, '54. MOOCs'),
-(29, 6, '11. Study and academic work');
+(29, 6, '11. Study and academic work'),
+(30, 7, 'topic');
 
 -- --------------------------------------------------------
 
@@ -184,35 +184,35 @@ CREATE TABLE IF NOT EXISTS `sc_Words` (
   `Id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `Word` char(30) NOT NULL,
   `Added` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `Topics` int(10) NOT NULL,
+  `Topics` int(10) unsigned NOT NULL,
   PRIMARY KEY (`Id`),
-  UNIQUE KEY `word` (`Word`)
-) ENGINE=MyISAM  DEFAULT CHARSET=utf8 AUTO_INCREMENT=82 ;
+  KEY `Words_Topics` (`Topics`)
+) ENGINE=InnoDB  DEFAULT CHARSET=utf8 AUTO_INCREMENT=85 ;
 
 --
 -- Дамп данных таблицы `sc_Words`
 --
 
 INSERT INTO `sc_Words` (`Id`, `Word`, `Added`, `Topics`) VALUES
-(1, 'dissuade', '2014-10-22 19:39:00', 0),
-(2, 'get', '2014-10-22 19:39:04', 0),
-(40, 'prone', '2015-04-19 07:43:06', 0),
-(36, 'woe', '2015-04-19 07:43:06', 0),
-(15, 'slump', '2014-10-24 14:59:52', 0),
-(39, 'mitigate', '2015-04-19 07:43:06', 0),
-(35, 'curb', '2015-04-19 07:43:06', 0),
-(34, 'butcher', '2014-10-25 09:33:32', 0),
-(37, 'admonition', '2015-04-19 07:43:06', 0),
-(38, 'booth', '2015-04-19 07:43:06', 0),
-(30, 'cat', '2015-04-19 07:43:06', 0),
-(41, 'arrogant', '2015-04-19 07:43:06', 0),
-(47, 'candid', '2015-04-19 07:43:06', 0),
-(48, 'awkward', '2015-04-19 07:43:06', 0),
-(49, 'dog', '2015-04-19 07:43:06', 0),
-(50, 'lien', '2015-04-19 07:43:06', 0),
-(51, 'dispel', '2015-04-19 07:43:06', 0),
+(1, 'dissuade', '2015-05-02 10:34:49', 30),
+(2, 'get', '2015-05-02 10:34:49', 30),
+(15, 'slump', '2015-05-02 10:34:49', 30),
+(30, 'cat', '2015-05-02 10:34:49', 30),
+(34, 'butcher', '2015-05-02 10:34:49', 30),
+(35, 'curb', '2015-05-02 10:34:49', 30),
+(36, 'woe', '2015-05-02 10:34:49', 30),
+(37, 'admonition', '2015-05-02 10:34:49', 30),
+(38, 'booth', '2015-05-02 10:34:49', 30),
+(39, 'mitigate', '2015-05-02 10:34:49', 30),
+(40, 'prone', '2015-05-02 10:34:49', 30),
+(41, 'arrogant', '2015-05-02 10:34:49', 30),
+(47, 'candid', '2015-05-02 10:34:49', 30),
+(48, 'awkward', '2015-05-02 10:34:49', 30),
+(49, 'dog', '2015-05-02 10:34:49', 30),
+(50, 'lien', '2015-05-02 10:34:49', 30),
+(51, 'dispel', '2015-05-02 10:34:49', 30),
 (52, 'sleek', '2015-04-19 07:43:06', 14),
-(53, 'hassle', '2015-04-19 07:43:06', 0),
+(53, 'hassle', '2015-05-02 10:34:49', 30),
 (54, 'Congestion', '2015-04-19 07:43:06', 20),
 (55, 'induce', '2015-04-19 07:43:06', 20),
 (56, 'dibilitate', '2015-04-19 07:43:06', 20),
@@ -236,11 +236,14 @@ INSERT INTO `sc_Words` (`Id`, `Word`, `Added`, `Topics`) VALUES
 (74, 'drought', '2015-04-19 07:43:06', 25),
 (75, 'obnoxious', '2015-04-19 07:43:06', 26),
 (76, 'leapfrog', '2015-04-19 07:43:06', 27),
-(77, 'kjhkjhkj', '2014-11-23 14:10:57', 0),
+(77, 'kjhkjhkj', '2015-05-02 10:34:49', 30),
 (78, 'iffy', '2015-04-19 07:43:06', 28),
 (79, 'tertiary', '2015-04-19 07:43:06', 28),
 (80, 'unwieldy', '2015-04-19 07:43:06', 28),
-(81, 'cram', '2015-04-19 07:43:06', 29);
+(81, 'cram', '2015-04-19 07:43:06', 29),
+(82, 'word', '2015-05-02 07:49:03', 30),
+(83, 'another', '2015-05-02 10:34:49', 30),
+(84, 'other', '2015-05-02 08:25:16', 24);
 
 -- --------------------------------------------------------
 
@@ -260,44 +263,74 @@ CREATE TABLE IF NOT EXISTS `sc__content` (
   `Chldrn` int(11) NOT NULL,
   PRIMARY KEY (`Name`),
   KEY `Order` (`Ord`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 --
 -- Дамп данных таблицы `sc__content`
 --
 
 INSERT INTO `sc__content` (`Name`, `ClassName`, `ParentName`, `Size`, `DisplayChild`, `FilteredByChild`, `FiltersOutput`, `Ord`, `Chldrn`) VALUES
+('Definition', 'StringContent', 'Definitions', 100, NULL, NULL, NULL, 6, 0),
+('Definitions', 'MultiDetailTable', 'Words', NULL, 'Definition', NULL, NULL, 3, 3),
+('Example', 'StringContent', 'Definitions', 100, NULL, NULL, NULL, 7, 0),
+('Part', 'StringContent', 'Parts', 10, NULL, NULL, NULL, 5, 0),
+('Parts', 'AttributeTable', 'Definitions', NULL, 'Part', NULL, NULL, 4, 1),
 ('Theme', 'StringContent', 'Themes', 30, NULL, NULL, NULL, 11, 0),
 ('Themes', 'AttributeTable', 'Topics', NULL, 'Theme', NULL, 1, 10, 1),
 ('Topic', 'StringContent', 'Topics', 30, NULL, NULL, NULL, 9, 0),
 ('Topics', 'AttributeTable', 'Words', NULL, 'Topic', 'Themes', 1, 8, 2),
-('Example', 'StringContent', 'Definitions', 100, NULL, NULL, NULL, 7, 0),
-('Definition', 'StringContent', 'Definitions', 100, NULL, NULL, NULL, 6, 0),
-('Part', 'StringContent', 'Parts', 10, NULL, NULL, NULL, 5, 0),
-('Parts', 'AttributeTable', 'Definitions', NULL, 'Part', NULL, NULL, 4, 1),
-('Definitions', 'MultiDetailTable', 'Words', NULL, NULL, NULL, NULL, 3, 3),
 ('Word', 'StringContent', 'Words', 20, NULL, NULL, NULL, 2, 0),
-('Words', 'MasterTable', NULL, NULL, NULL, NULL, NULL, 1, 3);
+('Words', 'MasterTable', NULL, NULL, 'Word', NULL, NULL, 1, 3);
 
 -- --------------------------------------------------------
 
 --
--- Структура таблицы `wl_state`
+-- Структура таблицы `sc__state`
 --
 
-CREATE TABLE IF NOT EXISTS `wl_state` (
-  `part_id` tinyint(4) NOT NULL,
-  `topic_id` int(10) NOT NULL,
-  `theme_id` int(10) NOT NULL,
-  `meaning_id` int(10) NOT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+CREATE TABLE IF NOT EXISTS `sc__state` (
+  `Name` char(20) NOT NULL,
+  `Value` int(10) NOT NULL,
+  PRIMARY KEY (`Name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 --
--- Дамп данных таблицы `wl_state`
+-- Дамп данных таблицы `sc__state`
 --
 
-INSERT INTO `wl_state` (`part_id`, `topic_id`, `theme_id`, `meaning_id`) VALUES
-(0, 25, 0, 0);
+INSERT INTO `sc__state` (`Name`, `Value`) VALUES
+('Parts', 9),
+('Themes', 7),
+('Topics', 30);
+
+--
+-- Ограничения внешнего ключа сохраненных таблиц
+--
+
+--
+-- Ограничения внешнего ключа таблицы `sc_Definitions`
+--
+ALTER TABLE `sc_Definitions`
+  ADD CONSTRAINT `sc_Definitions_ibfk_2` FOREIGN KEY (`Parts`) REFERENCES `sc_Parts` (`Id`),
+  ADD CONSTRAINT `sc_Definitions_ibfk_1` FOREIGN KEY (`Words`) REFERENCES `sc_Words` (`Id`);
+
+--
+-- Ограничения внешнего ключа таблицы `sc_Topics`
+--
+ALTER TABLE `sc_Topics`
+  ADD CONSTRAINT `sc_Topics_ibfk_1` FOREIGN KEY (`Themes`) REFERENCES `sc_Themes` (`Id`);
+
+--
+-- Ограничения внешнего ключа таблицы `sc_Words`
+--
+ALTER TABLE `sc_Words`
+  ADD CONSTRAINT `sc_Words_ibfk_1` FOREIGN KEY (`Topics`) REFERENCES `sc_Topics` (`Id`);
+
+--
+-- Ограничения внешнего ключа таблицы `sc__state`
+--
+ALTER TABLE `sc__state`
+  ADD CONSTRAINT `sc__state_ibfk_1` FOREIGN KEY (`Name`) REFERENCES `sc__content` (`Name`);
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;

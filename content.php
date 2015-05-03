@@ -1,7 +1,5 @@
 <?php 
 
-// Content classes, based on GoF "Composite" design pattern   
-
 require_once 'foundation.php';
 require_once 'query.php';
 require_once 'sqlconnect.php';
@@ -13,18 +11,24 @@ class Settings
 	private $prefix ;
 	private $content_table ;
 	private $state_table ;
+	private $main_form_id ;
 	
-	function __construct($pref,$cont_tab,$stat_tab) 
+	function __construct($pref,$cont_tab,$stat_tab,$form_id) 
 	{ 
-		$this->content_table=$cont_tab ; $this->state_table=$stat_tab ; $this->prefix=$pref ; 
+		$this->content_table=$cont_tab ; 
+		$this->state_table=$stat_tab ; 
+		$this->prefix=$pref ; 
+		$this->main_form_id=$form_id ;
 	}
 	function ContentTable() { return $this->prefix.$this->content_table ; }
 	function StateTable() { return $this->prefix.$this->state_table ; }
 	function Prefix() { return $this->prefix ; }
+	function MainFormId() { return $this->main_form_id ; }
 }
 
 
 
+// Content classes, based on GoF "Composite" design pattern   
 abstract class Content
 {
 	abstract function Accept($visitor) ;
@@ -335,6 +339,15 @@ class TableHeadVisitor extends HtmlElementVisitor
 		$ret.=$this->form_interface->TableHeadCol_end() ;
 		return $ret ;
 	}
+
+	function VisitMasterTableBefore($mt)
+	{
+		$ret="" ;
+		$ret.=$this->form_interface->TableHeadCol() ;
+		$ret.="Edit" ;
+		$ret.=$this->form_interface->TableHeadCol_end() ;
+		return $ret ;
+	}
 }
 
 class TableRowVisitor extends HtmlElementVisitor
@@ -349,6 +362,15 @@ class TableRowVisitor extends HtmlElementVisitor
 		$ret.=$this->form_interface->TableCol() ;
 		$name=$string->GetName() ;
 		$ret.=$this->row->$name ;
+		$ret.=$this->form_interface->TableCol_end() ;
+		return $ret ;
+	}
+
+	function VisitMasterTableBefore($string)
+	{
+		$ret="" ;
+		$ret.=$this->form_interface->TableCol() ;
+		$ret.=$this->form_interface->Button("mainform","E","Edit",$this->row->Id) ;
 		$ret.=$this->form_interface->TableCol_end() ;
 		return $ret ;
 	}
@@ -373,6 +395,7 @@ class QueryElementVisitor extends ContentVisitor
 	function VisitMasterTable($mastertable)	
 	{ 
 		$this->query->add_from($this->settings->Prefix().$mastertable->GetName()) ;
+		$this->query->add_select($this->settings->Prefix().$mastertable->GetName().".Id") ; 
 	}
 	function VisitMultiDetailTable($mdt)	
 	{ 
@@ -420,9 +443,6 @@ class SaveElementVisitor extends ContentVisitor
 class RestoreElementVisitor extends ContentVisitor
 {
 	private $object ;
-	private $post_request ;
-	
-	function __construct($post) { $this->post_request=$post ; }
 
 	function SetObject($object) { $this->object=$object ; }
 
@@ -444,9 +464,7 @@ class RestoreElementVisitor extends ContentVisitor
 		$content->SetFilteredByChild($this->object->FilteredByChild) ;
 		$content->SetFiltersOutput($this->object->FiltersOutput) ;
 		
-		if (!$this->post_request)
-			$content->SetCurrentValue($this->object->Value) ;
-				
+		$content->SetCurrentValue($this->object->Value) ;
 	}
 }
 
@@ -504,16 +522,19 @@ abstract class HtmlBuilder extends Builder
 // Builds html form to add new and query content 
 class FormBuilder extends HtmlBuilder
 {
+	use SqlConnectable ;
+	
 	function __construct($settings,$sqlconnect,$form_interface)
 	{
 		$this->before_visitor=new FormElementVisitor($settings,$sqlconnect,$form_interface) ;
 		$this->after_visitor=new FormElementVisitor($settings,$sqlconnect,$form_interface,1) ;
+		$this->SqlConnectableSet($settings, $sqlconnect) ;
 		parent::__construct($form_interface) ;
 	}
 	
 	// implementing builder interface
-	function BuildStart() { $this->result.=$this->output_interface->Header() ; }
-	function BuildEnd() { $this->result.=$this->output_interface->End() ; }
+	function BuildStart() { $this->result.=$this->output_interface->Header($this->settings->MainFormId()) ; }
+	function BuildEnd() { $this->result.=$this->output_interface->End("Insert") ; }
 }
 
 
@@ -726,25 +747,15 @@ class ContentRestorer
 {
 	use SqlConnectable ;
 	
-	private $post_request ;
-
-	function __construct($settings,$connect,$post) 
-	{
-		$this->SqlConnectableSet($settings, $connect) ;
-		$this->post_request=$post ;
-	}
-	
 	function Restore()
 	{
 		$query=new SqlQuery() ;
 		$query->add_select($this->settings->ContentTable().".*") ;
 		$query->add_from($this->settings->ContentTable()) ;
 		$query->add_order("ord desc") ;
-		if (!$this->post_request)
-		{
-			$query->add_select("Value") ;
-			$query->add_join($this->settings->StateTable(),$this->settings->StateTable().".Name=".$this->settings->ContentTable().".Name") ;
-		}	
+
+		$query->add_select("Value") ;
+		$query->add_join($this->settings->StateTable(),$this->settings->StateTable().".Name=".$this->settings->ContentTable().".Name") ;
 		  
 		$It=$this->sqlconnect->QueryObjectIterator($query->get_query()) ;
 
@@ -783,6 +794,77 @@ class ContentRestorer
 }
 
 
+// GoF Command class
+abstract class Command
+{
+	abstract function Execute() ;
+} 
+
+// commands to do smth with or using content structure
+abstract class ManipulateContentCommand extends Command
+{
+	use SqlConnectable ;
+	
+	protected $content ;
+	
+	function __construct($settings,$connect,$content) 
+	{ 
+		$this->content=$content ; 
+		$this->SqlConnectableSet($settings, $connect) ;
+	} 
+}
+
+
+// command to insert form data to user tables 
+class InsertCommand extends ManipulateContentCommand
+{
+	function Execute()
+	{
+		echo 'Insert' ;
+		
+		
+		$insert_builder=new InsertBuilder($this->settings,$this->sqlconnect) ;
+		$insert_parser=new ContentParser($insert_builder) ;
+		$insert_parser->ParseCompositesByDependency($this->content) ;
+			
+		// copy values from $_POST and save to state table
+		$post_builder=new POSTBuilder($this->settings,$this->sqlconnect) ;
+		$post_parser=new ContentParser($post_builder) ;
+		$post_parser->Parse($this->content) ;
+	}
+}
+
+// command to fill form fields with existing row values 
+class EditCommand extends ManipulateContentCommand
+{
+	function Execute()
+	{
+		echo 'Edit' ;
+		
+	}
+}
+
+
+
+// dispatcher knows only command names and has command objects to Execute()
+// it works like menu
+class Dispatcher
+{
+	private $commands_array ; // array of named Commands ;
+	
+	function __construct($arr) { $this->commands_array=$arr ; }
+	function ExecuteCommand($name) { $this->commands_array[$name]->Execute() ; }
+	
+	// Executes command if command name exist in POST request
+	function ExecuteFromPOST()
+	{
+		foreach($this->commands_array as $name => $command)
+			if (array_key_exists($name, $_POST))
+				$this->ExecuteCommand($name) ;
+	}
+}
+
+
 // GoF "Facade" class to generate web page
 class View
 {
@@ -799,26 +881,20 @@ class View
 
 	function GetView()
 	{
-		$post= ($_SERVER['REQUEST_METHOD']=='POST') ;
-		
 		// create restorer object and use it to restore content structure from sql table
-		$restorer=new ContentRestorer($this->settings,$this->sqlconnect,$post) ;
+		$restorer=new ContentRestorer($this->settings,$this->sqlconnect) ;
 		$content=$restorer->Restore() ;
-	
-
+		
+		// creating and dispatching commands from POST request
+		$post= ($_SERVER['REQUEST_METHOD']=='POST') ;
 		if ($post)
 		{
-			// insert data into user tables 
-			$insert_builder=new InsertBuilder($this->settings,$this->sqlconnect) ;
-			$insert_parser=new ContentParser($insert_builder) ;
-			$insert_parser->ParseCompositesByDependency($content) ;
-			
-			// copy values from $_POST and save to state table
-			$post_builder=new POSTBuilder($this->settings,$this->sqlconnect) ;
-			$post_parser=new ContentParser($post_builder) ;
-			$post_parser->Parse($content) ;
+			$dispatcher=new Dispatcher(array(
+								"Insert" => new InsertCommand($this->settings, $this->sqlconnect, $content),
+				                "Edit" => new EditCommand($this->settings, $this->sqlconnect, $content)
+			)) ;
+			$dispatcher->ExecuteFromPOST() ;		
 		}
-		
 		
 		// create form builder
 		$form_builder=new FormBuilder($this->settings,$this->sqlconnect,$this->form_interface) ;
@@ -830,8 +906,6 @@ class View
 		$tablehead_builder=new TableHeadBuilder($this->form_interface) ;
 		
 		$builders_array=array($form_builder,$query_builder,$tablehead_builder) ;
-		
-		// print_r($builders_array) ;
 		
 		// create all_builders object, containing all needed builders
 		$all_builders=new Builders($builders_array) ;
@@ -885,7 +959,7 @@ $content=new MasterTable('Words',array(
 */
 
 // create settings
-$settings=new Settings("sc_", "_content","_state") ;
+$settings=new Settings("sc_", "_content","_state","mainform") ;
 
 // create MySqli connection
 $db=new MySqliConnector('dollsfun.mysql.ukraine.com.ua','dollsfun_content','93hfkudn', 'dollsfun_content') ;
