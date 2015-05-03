@@ -1,2 +1,2 @@
 # StructuredContent
-Framework to build structuted content systems 
+Framework to build structured content systems 
