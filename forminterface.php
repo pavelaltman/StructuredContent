@@ -6,7 +6,7 @@ abstract class FormImp
 {
 	abstract function Header($url,$id) ;
 	abstract function End($submit_name) ;
-	abstract function TextInput($name,$size) ;
+	abstract function TextInput($name,$size,$value) ;
 	abstract function ListInput($name,$opt_iter,$value_label,$name_label,$selected_value,$default_name) ;
 	abstract function Fieldset() ;
 	abstract function Fieldset_end() ;
@@ -29,7 +29,10 @@ class HtmlFormImp extends FormImp
 {
 	function Header($url,$id) { return '<form action="'.$url.'" id="'.$id.'" method="post">' ; }
 	function End($submit_name) { return '<p><input type="submit" name="'.$submit_name.'"/></p></form>' ; } 
-	function TextInput($name,$size) { return $name.' <input type="'.'text" name="'.$name.'" size="'.$size.'">' ; }
+	function TextInput($name,$size,$value="") 
+	{ 
+		return $name.' <input type="'.'text" name="'.$name.'" size="'.$size.'" value="'.$value.'">' ; 
+	}
 
 	function ListInput($name,$opt_iter,$value_label,$name_label,$selected_value,$default_name) 
 	{ 
@@ -76,7 +79,7 @@ class FormInterface
 	function Fieldset_end() { return $this->imp->Fieldset_end() ; }
 	function Paragraf() { return $this->imp->Paragraf() ; }
 	function Paragraf_end() { return $this->imp->Paragraf_end() ; }
-	function TextInput($name,$size) { return $this->imp->TextInput($name,$size) ; }
+	function TextInput($name,$size,$value="") { return $this->imp->TextInput($name,$size,$value) ; }
 	function ListInput($name,$opt_iter,$value_label,$name_label,$selected_value,$default_name) 
             { return $this->imp->ListInput($name,$opt_iter,$value_label,$name_label,$selected_value,$default_name) ; }
 

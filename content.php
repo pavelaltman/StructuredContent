@@ -283,10 +283,13 @@ class HtmlElementVisitor extends ContentVisitorBeforeAfter
 class FormElementVisitor extends HtmlElementVisitor
 {
 	use SqlConnectable ;
+
+	private $edit_obj ;
 	
-	function __construct($settings,$sqlconnect,$interface,$after=0) 
+	function __construct($settings,$sqlconnect,$interface,$edit_obj,$after=0) 
 	{ 
 		$this->SqlConnectableSet($settings,$sqlconnect) ;
+		$this->edit_obj=$edit_obj ;
 		parent::__construct($interface,$after) ;
 	}
 	
@@ -294,7 +297,8 @@ class FormElementVisitor extends HtmlElementVisitor
 	{
 		$ret="" ;
 		//$ret.=$this->form_interface->Paragraf() ;
-		$ret.=$this->form_interface->TextInput($string->GetName(),$string->GetSize()) ;
+		$name=$string->GetName() ;
+		$ret.=$this->form_interface->TextInput($name,$string->GetSize(),$this->edit_obj->$name) ;
 		//$ret.=$this->form_interface->Paragraf_end() ;
 		return $ret ;
 	}
@@ -524,10 +528,10 @@ class FormBuilder extends HtmlBuilder
 {
 	use SqlConnectable ;
 	
-	function __construct($settings,$sqlconnect,$form_interface)
+	function __construct($settings,$sqlconnect,$form_interface,$edit_obj)
 	{
-		$this->before_visitor=new FormElementVisitor($settings,$sqlconnect,$form_interface) ;
-		$this->after_visitor=new FormElementVisitor($settings,$sqlconnect,$form_interface,1) ;
+		$this->before_visitor=new FormElementVisitor($settings,$sqlconnect,$form_interface,$edit_obj) ;
+		$this->after_visitor=new FormElementVisitor($settings,$sqlconnect,$form_interface,$edit_obj,1) ;
 		$this->SqlConnectableSet($settings, $sqlconnect) ;
 		parent::__construct($form_interface) ;
 	}
@@ -605,7 +609,8 @@ class QueryBuilder extends Builder
 	}
 
 	function GetQuery() { return $this->query->get_query() ; }
-
+	function GetSqlQuery() { return $this->query ; }
+	
 	// implementing builder interface
 	function BuildElementStart($element) {	$element->Accept($this->query_visitor) ; }
 }
@@ -820,9 +825,6 @@ class InsertCommand extends ManipulateContentCommand
 {
 	function Execute()
 	{
-		echo 'Insert' ;
-		
-		
 		$insert_builder=new InsertBuilder($this->settings,$this->sqlconnect) ;
 		$insert_parser=new ContentParser($insert_builder) ;
 		$insert_parser->ParseCompositesByDependency($this->content) ;
@@ -837,10 +839,20 @@ class InsertCommand extends ManipulateContentCommand
 // command to fill form fields with existing row values 
 class EditCommand extends ManipulateContentCommand
 {
+	private $obj ; 
+	
+	function Obj() { return $this->obj ; }
 	function Execute()
 	{
-		echo 'Edit' ;
+		// Get sql query  
+		$query_builder=new QueryBuilder($this->settings) ;
+		$parser=new ContentParser($query_builder) ;
+		$parser->Parse($this->content) ;
 		
+		// add Id of edited row and get result
+		$query=$query_builder->GetSqlQuery() ;
+		$query->add_where($this->settings->Prefix().$this->content->GetName().".Id=".$_POST["Edit"]) ;
+		$this->obj=$this->sqlconnect->QueryObject($query->get_query()) ;
 	}
 }
 
@@ -886,18 +898,21 @@ class View
 		$content=$restorer->Restore() ;
 		
 		// creating and dispatching commands from POST request
+		$edit_command=new EditCommand($this->settings, $this->sqlconnect, $content) ;
+		$insert_command=new InsertCommand($this->settings, $this->sqlconnect, $content) ;
+		
+		
 		$post= ($_SERVER['REQUEST_METHOD']=='POST') ;
 		if ($post)
 		{
-			$dispatcher=new Dispatcher(array(
-								"Insert" => new InsertCommand($this->settings, $this->sqlconnect, $content),
-				                "Edit" => new EditCommand($this->settings, $this->sqlconnect, $content)
-			)) ;
+			$dispatcher=new Dispatcher(array("Insert" => $insert_command, 
+					                         "Edit" => $edit_command)) ;
 			$dispatcher->ExecuteFromPOST() ;		
 		}
 		
+		
 		// create form builder
-		$form_builder=new FormBuilder($this->settings,$this->sqlconnect,$this->form_interface) ;
+		$form_builder=new FormBuilder($this->settings,$this->sqlconnect,$this->form_interface,$edit_command->Obj()) ;
 	
 		// create query builder
 		$query_builder=new QueryBuilder($this->settings) ;
