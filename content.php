@@ -307,12 +307,18 @@ class FormElementVisitor extends HtmlElementVisitor
 	{
 		$ret=$this->form_interface->Fieldset() ;
 
-		// fill list with attribute teable rows
-		$query="select Id,".$content->DisplayChild()." from ".$this->settings->Prefix().$content->GetName() ;
+
+		$name=$content->GetName() ;
+		
+		// fill list with attribute table rows
+		$query="select Id,".$content->DisplayChild()." from ".$this->settings->Prefix().$name ;
 			
+		// is this form to edit existing record
+		$edited=$this->edit_obj->$name ;
+				
 		// add child filter if needed
 		$chldnm=$content->FilteredByChild() ;
-		if (strlen($chldnm))
+		if (strlen($chldnm) && !$edited)
 		{
 			 $chld=$content->GetChild($chldnm) ;
 			 $query.=" where ".$chldnm."=".$chld->CurrentValue() ;
@@ -321,8 +327,11 @@ class FormElementVisitor extends HtmlElementVisitor
 			
 			
 		$It=$this->sqlconnect->QueryObjectIterator($query) ;
+
 		$selected= $content->CurrentValue() ;
-		$ret.=$this->form_interface->ListInput($content->GetName(),$It,"Id",$content->DisplayChild(),$selected,$content->DisplayChild()) ;
+		if ($edited) $selected=$edited ;
+
+		$ret.=$this->form_interface->ListInput($name,$It,"Id",$content->DisplayChild(),$selected,$content->DisplayChild()) ;
 
 		return $ret ;   
 	}
@@ -408,8 +417,12 @@ class QueryElementVisitor extends ContentVisitor
 	}
 	function VisitAttributeTable($at)	
 	{ 
-		$this->query->add_join($this->settings->Prefix().$at->GetName(),
-				               $this->settings->Prefix().$at->GetName().'.Id='.$this->settings->Prefix().$at->Par()->GetName().'.'.$at->GetName()) ;
+		$tabname=$this->settings->Prefix().$at->GetName() ;
+		$this->query->add_join($tabname,
+				               $tabname.'.Id='.$this->settings->Prefix().$at->Par()->GetName().'.'.$at->GetName()) ;
+		
+		// adding Id field as table name
+		$this->query->add_select($tabname.'.Id as '.$at->GetName()) ;
 		
 		// if this attribute table has current value, then adding filter 
 		if ($at->FiltersOutput())
