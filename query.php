@@ -96,6 +96,10 @@ class SqlQuery
 	{
 		return "UPDATE ".$this->istr." SET ".$this->ustr.(strlen($this->wstr) ? " WHERE ".$this->wstr : "") ;
 	}
+	function get_delete_query()
+	{
+		return "DELETE FROM ".$this->fstr.(strlen($this->wstr) ? " WHERE ".$this->wstr : "") ;
+	}
 }
 
 

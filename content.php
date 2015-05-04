@@ -123,6 +123,8 @@ abstract class CompositeContent extends Content
 	function DisplayChild() { return $this->display_child ; }
 	
 	function IsLeaf() { return false ;}
+	
+	function CanCascadeDelete() { return false ; }
 }
 
 class MasterTable extends CompositeContent
@@ -131,11 +133,13 @@ class MasterTable extends CompositeContent
 	{
 		return $visitor->VisitMasterTable($this) ;
 	}
+	function CanCascadeDelete() { return true ; }
 }
 
 class MultiDetailTable extends CompositeContent
 {
 	function DependsFromParent() { return true ; }
+	function CanCascadeDelete() { return true ; }
 	
 	function Accept($visitor)
 	{
@@ -348,6 +352,9 @@ class FormElementVisitor extends HtmlElementVisitor
 
 		$ret.=$this->form_interface->ListInput($name,$It,"Id",$content->DisplayChild(),$selected,$content->DisplayChild()) ;
 		
+		if ($selected)
+			$ret.=$this->form_interface->Button("mainform","d","CommandDelete".$name,$selected) ;
+		
 		return $ret ;   
 	}
 		
@@ -396,6 +403,9 @@ class TableRowVisitor extends HtmlElementVisitor
 		{
 			$name=$string->Par()->GetName() ;
 			$ret.=$this->form_interface->Button("mainform","e","CommandEdit".$name,$this->row->$name) ;
+
+			if ($string->Par()->CanCascadeDelete())
+				$ret.=$this->form_interface->Button("mainform","d","CommandDelete".$name,$this->row->$name) ;
 		}
 		
 		$ret.=$this->form_interface->TableCol_end() ;
@@ -743,12 +753,17 @@ class InsertBuilder extends Builder
 			{
 				// Table Id already exists in POST, so it is update
 				$query->add_where("Id=".$_POST[$element->GetName()]) ;
+
 				// echo "<br/>".$query->get_update_query() ;
+				
 				$this->sqlconnect->SimpleQuery($query->get_update_query()) ;
 			}
 			else 
 			{
 				// Insert 
+				
+				// echo "<br/>".$query->get_insert_query() ;
+				
 				$this->sqlconnect->SimpleQuery($query->get_insert_query()) ;
 				
 				// adding Id of new inserted recors to POST
@@ -869,7 +884,7 @@ class ContentRestorer
 // GoF Command class
 abstract class Command
 {
-	abstract function Execute() ;
+	function Execute() {}
 } 
 
 // commands to do smth with or using content structure
@@ -888,7 +903,7 @@ abstract class ManipulateContentCommand extends Command
 
 
 // command to insert form data to user tables 
-class InsertCommand extends ManipulateContentCommand
+class CommandInsert extends ManipulateContentCommand
 {
 	function Execute()
 	{
@@ -903,31 +918,47 @@ class InsertCommand extends ManipulateContentCommand
 	}
 }
 
+
+class SingleTableCommand extends ManipulateContentCommand
+{
+	protected $update_id, $post_len, $com_len, $tabname ;
+	
+	protected function calc()
+	{
+		$this->update_id=$_POST[$_POST['command_key']] ;
+		
+		$this->post_len=strlen($_POST['command_key']) ;
+		$this->com_len=strlen(get_class($this)) ;
+		
+		$this->tabname=substr($_POST['command_key'],$this->com_len,$this->post_len-$this->com_len) ;
+	} 
+}
+
 // command to fill form fields with existing row values 
-class EditCommand extends ManipulateContentCommand
+class CommandEdit extends SingleTableCommand
 {
 	private $obj ; 
 	
 	function Obj() { return $this->obj ; }
 	function Execute()
 	{
-		$update_id=$_POST[$_POST['command_key']] ;
+		$this->calc() ;
 		
-		$post_len=strlen($_POST['command_key']) ;
-		$com_len=strlen('CommandEdit') ;
-		$local_update=($post_len>$com_len) ;	
-		if ($local_update)	
+		if ($this->post_len>$this->com_len)	
 		{
-			$tabname=substr($_POST['command_key'],$com_len,$post_len-$com_len) ;
+			// only one table updated
 			$query= new SqlQuery() ;
-			$query->add_from($this->settings->Prefix().$tabname) ;
+			$query->add_from($this->settings->Prefix().$this->tabname) ;
 			$query->add_select('*') ;
-			$query->add_where("Id=".$update_id) ;
+		    $query->add_select('Id as '.$this->tabname) ;
+			$query->add_where("Id=".$this->update_id) ;
 			
 			$this->obj=$this->sqlconnect->QueryObject($query->get_query()) ;
 		}
 		else 
 		{
+			// all tables updated
+			
 			// Get sql query from content structure  
 			$query_builder=new QueryBuilder($this->settings) ;
 			$parser=new ContentParser($query_builder) ;
@@ -935,12 +966,31 @@ class EditCommand extends ManipulateContentCommand
 			$query=$query_builder->GetSqlQuery() ;
 			
 			// add Id of edited row and get result
-			$query->add_where($this->settings->Prefix().$this->content->GetName().".Id=".$update_id) ;
+			$query->add_where($this->settings->Prefix().$this->content->GetName().".Id=".$this->update_id) ;
 			$this->obj=$this->sqlconnect->QueryObject($query->get_query()) ;
 		}
 	}
 }
 
+class CommandDelete extends SingleTableCommand
+{
+	function Execute()
+	{
+		$this->calc() ;
+	
+		if ($this->post_len>$this->com_len)
+		{
+			// only from one table data can be deleted
+			$query= new SqlQuery() ;
+			$query->add_from($this->settings->Prefix().$this->tabname) ;
+			$query->add_where("Id=".$this->update_id) ;
+				
+			// echo $query->get_delete_query() ;
+				
+			$this->sqlconnect->SimpleQuery($query->get_delete_query()) ;
+		}
+	}
+}
 
 
 // dispatcher knows only command names and has command objects to Execute()
@@ -989,9 +1039,10 @@ class View
 		$restorer=new ContentRestorer($this->settings,$this->sqlconnect) ;
 		$content=$restorer->Restore() ;
 		
-		// creating and dispatching commands from POST request
-		$edit_command=new EditCommand($this->settings, $this->sqlconnect, $content) ;
-		$insert_command=new InsertCommand($this->settings, $this->sqlconnect, $content) ;
+		// creating commands from POST request
+		$edit_command=new CommandEdit($this->settings, $this->sqlconnect, $content) ;
+		$insert_command=new CommandInsert($this->settings, $this->sqlconnect, $content) ;
+		$delete_command=new CommandDelete($this->settings, $this->sqlconnect, $content) ;
 		
 
 		print_r($_POST) ;
@@ -999,7 +1050,8 @@ class View
 		$post= ($_SERVER['REQUEST_METHOD']=='POST') ;
 		if ($post)
 		{
-			$dispatcher=new Dispatcher(array("Insert" => $insert_command, 
+			$dispatcher=new Dispatcher(array("Insert" => $insert_command,
+											 "Delete" => $delete_command,
 					                         "Edit" => $edit_command)) ;
 			$dispatcher->ExecuteFromPOST() ;		
 		}
@@ -1031,6 +1083,8 @@ class View
 		$row_builder=new TableRowBuilder($this->form_interface) ;
 		$row_parser=new ContentParser($row_builder) ;
 				
+		// echo "<br/>".$query_builder->GetQuery() ;
+		
 		$outrows=$this->sqlconnect->QueryObjectIterator($query_builder->GetQuery()) ;
 		for ($outrows->First() ; !$outrows->IsDone() ; $outrows->Next())
 		{
