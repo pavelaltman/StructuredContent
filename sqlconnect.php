@@ -9,6 +9,7 @@ abstract class SqlConnector
 	abstract function SimpleQuery($query) ; 
 	abstract function QueryObjectIterator($query) ;
 	abstract function InsertId() ;
+	abstract function Esc($string) ;
 }
 
 
@@ -59,6 +60,7 @@ class MySqliConnector extends SqlConnector
 	}
 	
 	function InsertId() { return $this->connection->insert_id ; }
+	function Esc($string) { return $this->connection->real_escape_string($string) ; }
 }
 
 

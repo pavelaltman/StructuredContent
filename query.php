@@ -9,6 +9,7 @@ class SqlQuery
 			$istr, // table to insert 
 			$cstr, // columns to insert 
 			$vstr, // values to insert
+			$ustr, // value pairs for upadate, filled with insert values
 			$dstr; // update on duplicate key
 	
 
@@ -23,6 +24,7 @@ class SqlQuery
 		$this->cstr="" ; 
 		$this->vstr="" ;
 		$this->dstr="" ;
+		$this->ustr="" ;
 	}
 	
 	function __construct()
@@ -70,6 +72,9 @@ class SqlQuery
 	{
 		$this->cstr=$this->cstr.(strlen($this->cstr) ? ",":"").$column ;
 		$this->vstr=$this->vstr.(strlen($this->vstr) ? ",":"")."'".$value."'" ;
+
+	    // also fill ustr
+	    $this->ustr=$this->ustr.(strlen($this->ustr) ? ",":"").$column."='".$value."'" ;
 	}
 	
 	function add_duplicate($add_dup)
@@ -86,6 +91,10 @@ class SqlQuery
 	function get_insert_query()
 	{
 		return "INSERT INTO ".$this->istr." (".$this->cstr.") VALUES (".$this->vstr.")".(strlen($this->dstr) ? " ON DUPLICATE KEY UPDATE ".$this->dstr : "") ;
+	}
+	function get_update_query()
+	{
+		return "UPDATE ".$this->istr." SET ".$this->ustr.(strlen($this->wstr) ? " WHERE ".$this->wstr : "") ;
 	}
 }
 

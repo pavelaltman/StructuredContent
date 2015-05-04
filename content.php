@@ -76,6 +76,7 @@ abstract class SimpleContent extends Content
 	function ReplaceChild_newname($name,$newname,$newchild) {}
 	
 	function IsLeaf() { return true ;}
+	function IsDisplay() { return $this->Par()->DisplayChild()==$this->GetName() ; }
 }
 
 class StringContent extends SimpleContent
@@ -303,6 +304,20 @@ class FormElementVisitor extends HtmlElementVisitor
 		return $ret ;
 	}
 
+
+	function VisitMultiDetailTableBefore($content)
+	{
+		$name=$content->GetName() ;
+		return $this->form_interface->HiddenInput($name,$this->edit_obj->$name) ;
+	}
+	
+	function VisitMasterTableBefore($content)
+	{
+		$name=$content->GetName() ;
+		return $this->form_interface->HiddenInput($name,$this->edit_obj->$name) ;
+	}
+	
+
 	function VisitAttributeTableBefore($content) 
 	{
 		$ret=$this->form_interface->Fieldset() ;
@@ -332,7 +347,7 @@ class FormElementVisitor extends HtmlElementVisitor
 		if ($edited) $selected=$edited ;
 
 		$ret.=$this->form_interface->ListInput($name,$It,"Id",$content->DisplayChild(),$selected,$content->DisplayChild()) ;
-
+		
 		return $ret ;   
 	}
 		
@@ -375,15 +390,25 @@ class TableRowVisitor extends HtmlElementVisitor
 		$ret.=$this->form_interface->TableCol() ;
 		$name=$string->GetName() ;
 		$ret.=$this->row->$name ;
+
+		// if this is a display field for parent table then add local edit button 
+		if ($string->IsDisplay())
+		{
+			$name=$string->Par()->GetName() ;
+			$ret.=$this->form_interface->Button("mainform","e","CommandEdit".$name,$this->row->$name) ;
+		}
+		
 		$ret.=$this->form_interface->TableCol_end() ;
+		
 		return $ret ;
 	}
 
-	function VisitMasterTableBefore($string)
+	function VisitMasterTableBefore($content)
 	{
 		$ret="" ;
 		$ret.=$this->form_interface->TableCol() ;
-		$ret.=$this->form_interface->Button("mainform","E","Edit",$this->row->Id) ;
+		$name=$content->GetName() ;
+		$ret.=$this->form_interface->Button("mainform","E","CommandEdit",$this->row->$name) ;
 		$ret.=$this->form_interface->TableCol_end() ;
 		return $ret ;
 	}
@@ -405,24 +430,34 @@ class QueryElementVisitor extends ContentVisitor
 	{ 
 		$this->query->add_select($this->settings->Prefix().$string->Par()->GetName().".".$string->GetName()) ; 
 	}
+	
+	function AddIdToQuery($table)
+	{
+		$this->query->add_select($this->settings->Prefix().$table->GetName().'.Id as '.$table->GetName()) ;
+	}
+	
 	function VisitMasterTable($mastertable)	
 	{ 
 		$this->query->add_from($this->settings->Prefix().$mastertable->GetName()) ;
-		$this->query->add_select($this->settings->Prefix().$mastertable->GetName().".Id") ; 
+		// $this->query->add_select($this->settings->Prefix().$mastertable->GetName().".Id") ; 
+		$this->AddIdToQuery($mastertable) ;
+		$this->query->add_order($mastertable->DisplayChild()) ;
 	}
+	
 	function VisitMultiDetailTable($mdt)	
 	{ 
 		$this->query->add_join($this->settings->Prefix().$mdt->GetName(),
 				               $this->settings->Prefix().$mdt->GetName().'.'.$mdt->Par()->GetName().'='.$this->settings->Prefix().$mdt->Par()->GetName().'.Id') ;
+		$this->AddIdToQuery($mdt) ;
 	}
+	
 	function VisitAttributeTable($at)	
 	{ 
 		$tabname=$this->settings->Prefix().$at->GetName() ;
 		$this->query->add_join($tabname,
 				               $tabname.'.Id='.$this->settings->Prefix().$at->Par()->GetName().'.'.$at->GetName()) ;
 		
-		// adding Id field as table name
-		$this->query->add_select($tabname.'.Id as '.$at->GetName()) ;
+		$this->AddIdToQuery($at) ;
 		
 		// if this attribute table has current value, then adding filter 
 		if ($at->FiltersOutput())
@@ -447,9 +482,14 @@ class SaveElementVisitor extends ContentVisitor
 		$this->query->add_values("Size",$string->GetSize()) ; 
 	}
 
+	function VisitCompositeContent($content)
+	{
+		$this->query->add_values("DisplayChild",$content->DisplayChild()) ;
+	}
+	
 	function VisitAttributeTable($content) 
 	{ 
-		$this->query->add_values("DisplayChild",$content->DisplayChild()) ; 
+		$this->VisitCompositeContent($content) ; 
 		$this->query->add_values("FilteredByChild",$content->FilteredByChild()) ; 
 		$this->query->add_values("FiltersOutput",$content->FiltersOutput()) ; 
 	}
@@ -551,7 +591,7 @@ class FormBuilder extends HtmlBuilder
 	
 	// implementing builder interface
 	function BuildStart() { $this->result.=$this->output_interface->Header($this->settings->MainFormId()) ; }
-	function BuildEnd() { $this->result.=$this->output_interface->End("Insert") ; }
+	function BuildEnd() { $this->result.=$this->output_interface->End("CommandInsert") ; }
 }
 
 
@@ -692,15 +732,29 @@ class InsertBuilder extends Builder
 			{
 				$ch=$It->Current() ;
 				if (!$ch->DependsFromParent())
-					$query->add_values($ch->GetName(), $_POST[$ch->GetName()]) ;
+					$query->add_values($ch->GetName(), $this->sqlconnect->Esc($_POST[$ch->GetName()])) ;
 			}
 			// adding parent table if this depends from parent
 			if ($element->DependsFromParent())
-				$query->add_values($element->Par()->GetName(), $_POST[$element->Par()->GetName()]) ;
+				$query->add_values($element->Par()->GetName(), $this->sqlconnect->Esc($_POST[$element->Par()->GetName()])) ;
 				
-			// insert data and then add Id to $_POST
-			$this->sqlconnect->SimpleQuery($query->get_insert_query()) ;
-			$_POST[$element->GetName()]=$this->sqlconnect->InsertId() ;
+			// insert or upate data and then add Id to $_POST
+			if ($_POST[$element->GetName()])
+			{
+				// Table Id already exists in POST, so it is update
+				$query->add_where("Id=".$_POST[$element->GetName()]) ;
+				// echo "<br/>".$query->get_update_query() ;
+				$this->sqlconnect->SimpleQuery($query->get_update_query()) ;
+			}
+			else 
+			{
+				// Insert 
+				$this->sqlconnect->SimpleQuery($query->get_insert_query()) ;
+				
+				// adding Id of new inserted recors to POST
+				$_POST[$element->GetName()]=$this->sqlconnect->InsertId() ;
+			}
+				
 		}
 		
 	}
@@ -857,15 +911,33 @@ class EditCommand extends ManipulateContentCommand
 	function Obj() { return $this->obj ; }
 	function Execute()
 	{
-		// Get sql query  
-		$query_builder=new QueryBuilder($this->settings) ;
-		$parser=new ContentParser($query_builder) ;
-		$parser->Parse($this->content) ;
+		$update_id=$_POST[$_POST['command_key']] ;
 		
-		// add Id of edited row and get result
-		$query=$query_builder->GetSqlQuery() ;
-		$query->add_where($this->settings->Prefix().$this->content->GetName().".Id=".$_POST["Edit"]) ;
-		$this->obj=$this->sqlconnect->QueryObject($query->get_query()) ;
+		$post_len=strlen($_POST['command_key']) ;
+		$com_len=strlen('CommandEdit') ;
+		$local_update=($post_len>$com_len) ;	
+		if ($local_update)	
+		{
+			$tabname=substr($_POST['command_key'],$com_len,$post_len-$com_len) ;
+			$query= new SqlQuery() ;
+			$query->add_from($this->settings->Prefix().$tabname) ;
+			$query->add_select('*') ;
+			$query->add_where("Id=".$update_id) ;
+			
+			$this->obj=$this->sqlconnect->QueryObject($query->get_query()) ;
+		}
+		else 
+		{
+			// Get sql query from content structure  
+			$query_builder=new QueryBuilder($this->settings) ;
+			$parser=new ContentParser($query_builder) ;
+			$parser->Parse($this->content) ;
+			$query=$query_builder->GetSqlQuery() ;
+			
+			// add Id of edited row and get result
+			$query->add_where($this->settings->Prefix().$this->content->GetName().".Id=".$update_id) ;
+			$this->obj=$this->sqlconnect->QueryObject($query->get_query()) ;
+		}
 	}
 }
 
@@ -883,8 +955,15 @@ class Dispatcher
 	// Executes command if command name exist in POST request
 	function ExecuteFromPOST()
 	{
+		
+		foreach($_POST as $key => $value)
+			if (strpos($key,'Command')!==false)
+				$com_str=$key ;
+		
+		$_POST['command_key']=$com_str ;
+			
 		foreach($this->commands_array as $name => $command)
-			if (array_key_exists($name, $_POST))
+			if (strpos($com_str, $name)!==false)
 				$this->ExecuteCommand($name) ;
 	}
 }
@@ -914,6 +993,8 @@ class View
 		$edit_command=new EditCommand($this->settings, $this->sqlconnect, $content) ;
 		$insert_command=new InsertCommand($this->settings, $this->sqlconnect, $content) ;
 		
+
+		print_r($_POST) ;
 		
 		$post= ($_SERVER['REQUEST_METHOD']=='POST') ;
 		if ($post)

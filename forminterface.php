@@ -7,6 +7,7 @@ abstract class FormImp
 	abstract function Header($url,$id) ;
 	abstract function End($submit_name) ;
 	abstract function TextInput($name,$size,$value) ;
+	abstract function HiddenInput($name,$value) ;
 	abstract function ListInput($name,$opt_iter,$value_label,$name_label,$selected_value,$default_name) ;
 	abstract function Fieldset() ;
 	abstract function Fieldset_end() ;
@@ -31,9 +32,13 @@ class HtmlFormImp extends FormImp
 	function End($submit_name) { return '<p><input type="submit" name="'.$submit_name.'"/></p></form>' ; } 
 	function TextInput($name,$size,$value="") 
 	{ 
-		return $name.' <input type="'.'text" name="'.$name.'" size="'.$size.'" value="'.$value.'">' ; 
+		return $name.' <input type="text" name="'.$name.'" size="'.$size.'" value="'.$value.'">' ; 
 	}
-
+	function HiddenInput($name,$value)
+	{
+		return ' <input type="hidden" name="'.$name.'" value="'.$value.'">' ;
+	}
+	
 	function ListInput($name,$opt_iter,$value_label,$name_label,$selected_value,$default_name) 
 	{ 
 		$ret='<select name="'.$name.'"> <option value="0"> '.$default_name.'</option>' ;
@@ -80,6 +85,7 @@ class FormInterface
 	function Paragraf() { return $this->imp->Paragraf() ; }
 	function Paragraf_end() { return $this->imp->Paragraf_end() ; }
 	function TextInput($name,$size,$value="") { return $this->imp->TextInput($name,$size,$value) ; }
+	function HiddenInput($name,$value) { return $this->imp->HiddenInput($name,$value) ; }
 	function ListInput($name,$opt_iter,$value_label,$name_label,$selected_value,$default_name) 
             { return $this->imp->ListInput($name,$opt_iter,$value_label,$name_label,$selected_value,$default_name) ; }
 
