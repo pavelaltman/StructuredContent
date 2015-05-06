@@ -24,6 +24,8 @@ abstract class FormImp
 	abstract function TableHeadCol_end() ;
 	
 	abstract function Button($form,$text,$name,$value) ;
+	
+	abstract function NewLine() ;
 }
 
 class HtmlFormImp extends FormImp
@@ -71,6 +73,8 @@ class HtmlFormImp extends FormImp
 	{
 		return '<button form="'.$form.'" name="'.$name.'" value="'.$value.'">'.$text.'</button>' ;
 	}
+
+	function NewLine() { return "<br/>" ; }
 }
 
 class FormInterface
@@ -98,6 +102,8 @@ class FormInterface
 	function TableHeadCol() { return $this->imp->TableHeadCol() ; }
 	function TableHeadCol_end() { return $this->imp->TableHeadCol_end() ; }
 	function Button($form,$text,$name,$value) { return $this->imp->Button($form,$text,$name,$value); }
+
+	function NewLine() { return $this->imp->NewLine() ; }
 }
 
 
