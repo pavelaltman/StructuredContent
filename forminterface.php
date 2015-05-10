@@ -34,11 +34,11 @@ class HtmlFormImp extends FormImp
 	function End($submit_name) { return '<p><input type="submit" name="'.$submit_name.'"/></p></form>' ; } 
 	function TextInput($name,$size,$value="") 
 	{ 
-		return $name.' <input type="text" name="'.$name.'" size="'.$size.'" value="'.$value.'">' ; 
+		return '<input type="text" name="'.$name.'" size="'.$size.'" value="'.$value.'">' ; 
 	}
 	function HiddenInput($name,$value)
 	{
-		return ' <input type="hidden" name="'.$name.'" value="'.$value.'">' ;
+		return '<input type="hidden" name="'.$name.'" value="'.$value.'">' ;
 	}
 	
 	function ListInput($name,$opt_iter,$value_label,$name_label,$selected_value,$default_name) 

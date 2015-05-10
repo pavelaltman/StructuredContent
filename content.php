@@ -4,6 +4,7 @@ require_once 'foundation.php';
 require_once 'query.php';
 require_once 'sqlconnect.php';
 require_once 'forminterface.php';
+require_once 'command.php';
 
 // application settings, i.e. table names
 class Settings
@@ -12,18 +13,29 @@ class Settings
 	private $content_table ;
 	private $state_table ;
 	private $main_form_id ;
+	private $content_types ;
 	
-	function __construct($pref,$cont_tab,$stat_tab,$form_id) 
+	function __construct($pref,$cont_tab,$stat_tab,$form_id,$types) 
 	{ 
 		$this->content_table=$cont_tab ; 
 		$this->state_table=$stat_tab ; 
 		$this->prefix=$pref ; 
 		$this->main_form_id=$form_id ;
+		
+		// create array of objects as neeeded in form select 
+		$this->content_types=array() ;
+		foreach($types as $type)
+		{
+			$obj=new stdClass ; 
+			$obj->ClassName=$type ;
+			$this->content_types[]=$obj ;
+		}	
 	}
 	function ContentTable() { return $this->prefix.$this->content_table ; }
 	function StateTable() { return $this->prefix.$this->state_table ; }
 	function Prefix() { return $this->prefix ; }
 	function MainFormId() { return $this->main_form_id ; }
+	function GetTypesIterator() { return new GoFArrayIterator($this->content_types) ; }
 }
 
 
@@ -33,39 +45,60 @@ abstract class Content
 {
 	abstract function Accept($visitor) ;
 
-	abstract function AddChild(Content $Child) ; 
-	abstract function DelChild($name) ;
+	//abstract function AddChild(Content $Child) ; 
+	//abstract function DelChild($name) ;
 	
-	abstract function ReplaceChild_keepname($name,$newchild) ;
-	abstract function ReplaceChild_newname($name,$newname,$newchild) ;
+	//abstract function ReplaceChild_keepname($name,$newchild) ;
+	//abstract function ReplaceChild_newname($name,$newname,$newchild) ;
 	
 	abstract function IsLeaf() ;
 	function DependsFromParent() { return false ; } 
+	
+	function GetSize() { return "" ; }
+	function DisplayChild() { return "" ; }
+	function FilteredByChild() { return "" ; }
+	function FiltersOutput() { return false ; }
+	
+	
 	
 	private $name ;
 	private $par ;
 	
 	protected $children ;
-	private $iterator ;
-	
+		
 	function __construct($name,$children)
 	{
 		$this->name=$name ;
 		$this->children=$children ;
 		$this->par=null ;
 				
-		// create iterator to itereate children
-		$this->iterator=new GofArrayIterator($this->children) ;
-	
 		// set parent to all chidren
-		for ($this->iterator->First(); !$this->iterator->IsDone() ; $this->iterator->Next())
-			$this->iterator->Current()->SetPar($this) ;
+		$It=$this->GetChildrenIterator() ;
+		for ($It->First(); !$It->IsDone() ; $It->Next())
+			 $It->Current()->SetPar($this) ;
 	}
 	
-	function GetChildrenIterator() { return $this->iterator ; }
+	function GetChildrenIterator() { return new GofArrayIterator($this->children) ; }
 	function GetName() { return $this->name ; }
 	function Par() { return $this->par ; }
 	function SetPar($par) { $this->par=$par ; }
+	
+	function GetElementByName($name)
+	{
+		if ($this->GetName()==$name) 
+			return $this ;
+		
+		$iterator=$this->GetChildrenIterator() ;
+		for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
+		{
+			$ret=$iterator->Current()->GetElementByName($name) ;
+			if ($ret!=null)
+				return $ret ;		
+		}		
+		
+		return null ;
+	}
+	
 }
 
 abstract class SimpleContent extends Content 
@@ -97,10 +130,28 @@ abstract class CompositeContent extends Content
 	private $display_child ;
 	 
 	function SetDisplayChild($display_child) { $this->display_child=$display_child ; }
-	function AddChild(Content $Child) 
+	function AddChild(Content $Child,$after_child) 
 	{  
 		$Child->SetPar($this) ;
-		$this->children[$Child->GetName()]=$Child ; 
+		
+		// find $after_child position in children array
+		$pos=0 ;
+		if (strlen($after_child))
+		{
+			$i=0 ;
+			foreach($this->children as $key => $child)
+			{
+				$i++ ;
+				if ($key==$after_child)
+					$pos=$i ;
+			}
+		}			
+		
+		$ins=array($Child->GetName() => $Child) ;
+		array_splice($this->children, $pos, 0, $ins);
+		
+		// print_r($this->children) ;
+		// $this->children[$Child->GetName()]=$Child ; 
 	}
 	function DelChild($name) { unset($this->children[$name]) ; }
 	function ReplaceChild_keepname($name,$newchild) 
@@ -303,7 +354,7 @@ class FormElementVisitor extends HtmlElementVisitor
 		$ret="" ;
 		//$ret.=$this->form_interface->Paragraf() ;
 		$name=$string->GetName() ;
-		$ret.=$this->form_interface->TextInput($name,$string->GetSize(),$this->edit_obj->$name) ;
+		$ret.=$name.' '.$this->form_interface->TextInput($name,$string->GetSize(),$this->edit_obj->$name) ;
 		//$ret.=$this->form_interface->Paragraf_end() ;
 		return $ret ;
 	}
@@ -353,7 +404,7 @@ class FormElementVisitor extends HtmlElementVisitor
 		$ret.=$this->form_interface->ListInput($name,$It,"Id",$content->DisplayChild(),$selected,$content->DisplayChild()) ;
 		
 		if ($selected)
-			$ret.=$this->form_interface->Button("mainform","d","CommandDelete".$name,$selected) ;
+			$ret.=$this->form_interface->Button("mainform","d","CommandDeleteContent".$name,$selected) ;
 		
 		return $ret ;   
 	}
@@ -402,10 +453,10 @@ class TableRowVisitor extends HtmlElementVisitor
 		if ($string->IsDisplay())
 		{
 			$name=$string->Par()->GetName() ;
-			$ret.=$this->form_interface->Button("mainform","e","CommandEdit".$name,$this->row->$name) ;
+			$ret.=$this->form_interface->Button("mainform","e","CommandEditContent".$name,$this->row->$name) ;
 
 			if ($string->Par()->CanCascadeDelete())
-				$ret.=$this->form_interface->Button("mainform","d","CommandDelete".$name,$this->row->$name) ;
+				$ret.=$this->form_interface->Button("mainform","d","CommandDeleteContent".$name,$this->row->$name) ;
 		}
 		
 		$ret.=$this->form_interface->TableCol_end() ;
@@ -418,7 +469,7 @@ class TableRowVisitor extends HtmlElementVisitor
 		$ret="" ;
 		$ret.=$this->form_interface->TableCol() ;
 		$name=$content->GetName() ;
-		$ret.=$this->form_interface->Button("mainform","E","CommandEdit",$this->row->$name) ;
+		$ret.=$this->form_interface->Button("mainform","E","CommandEditContent",$this->row->$name) ;
 		$ret.=$this->form_interface->TableCol_end() ;
 		return $ret ;
 	}
@@ -502,6 +553,16 @@ class SaveElementVisitor extends ContentVisitor
 		$this->VisitCompositeContent($content) ; 
 		$this->query->add_values("FilteredByChild",$content->FilteredByChild()) ; 
 		$this->query->add_values("FiltersOutput",$content->FiltersOutput()) ; 
+	}
+
+	function VisitMasterTable($content)
+	{
+		$this->VisitCompositeContent($content) ;
+	}
+
+	function VisitMultiDetailTable($content)
+	{
+		$this->VisitCompositeContent($content) ;
 	}
 }
 	
@@ -601,7 +662,7 @@ class FormBuilder extends HtmlBuilder
 	
 	// implementing builder interface
 	function BuildStart() { $this->result.=$this->output_interface->Header($this->settings->MainFormId()) ; }
-	function BuildEnd() { $this->result.=$this->output_interface->End("CommandInsert") ; }
+	function BuildEnd() { $this->result.=$this->output_interface->End("CommandInsertContent") ; }
 }
 
 
@@ -696,7 +757,13 @@ class SaveBuilder extends Builder
 		$order=0 ;
 	}
 
-	// implementing builder interface
+	function BuildStart()
+	{
+		$this->query->Reset() ;
+		$this->query->add_from($this->settings->ContentTable()) ;
+		$this->sqlconnect->SimpleQuery($this->query->get_delete_query()) ;
+	}
+	
 	function BuildElementStart($element) 
 	{
 		$this->query->Reset() ;
@@ -836,11 +903,13 @@ class ContentRestorer
 	
 	function Restore()
 	{
+		// query content structure table
 		$query=new SqlQuery() ;
 		$query->add_select($this->settings->ContentTable().".*") ;
 		$query->add_from($this->settings->ContentTable()) ;
 		$query->add_order("ord desc") ;
 
+		// add state table to query
 		$query->add_select("Value") ;
 		$query->add_join($this->settings->StateTable(),$this->settings->StateTable().".Name=".$this->settings->ContentTable().".Name") ;
 		  
@@ -881,29 +950,33 @@ class ContentRestorer
 }
 
 
-// GoF Command class
-abstract class Command
-{
-	function Execute() {}
-} 
 
 // commands to do smth with or using content structure
-abstract class ManipulateContentCommand extends Command
+abstract class ContentCommand extends POSTCommand 
 {
-	use SqlConnectable ;
-	
 	protected $content ;
 	
-	function __construct($settings,$connect,$content) 
+	function __construct($content) 
 	{ 
 		$this->content=$content ; 
-		$this->SqlConnectableSet($settings, $connect) ;
 	} 
+}
+
+// content command with sql operations
+abstract class ContentSQLCommand extends ContentCommand
+{
+	use SqlConnectable ;
+
+	function __construct($settings,$connect,$content)
+	{
+		parent::__construct($content) ;
+		$this->SqlConnectableSet($settings, $connect) ;
+	}
 }
 
 
 // command to insert form data to user tables 
-class CommandInsert extends ManipulateContentCommand
+class CommandInsertContent extends ContentSQLCommand
 {
 	function Execute()
 	{
@@ -919,39 +992,23 @@ class CommandInsert extends ManipulateContentCommand
 }
 
 
-class SingleTableCommand extends ManipulateContentCommand
-{
-	protected $update_id, $post_len, $com_len, $tabname ;
-	
-	protected function calc()
-	{
-		$this->update_id=$_POST[$_POST['command_key']] ;
-		
-		$this->post_len=strlen($_POST['command_key']) ;
-		$this->com_len=strlen(get_class($this)) ;
-		
-		$this->tabname=substr($_POST['command_key'],$this->com_len,$this->post_len-$this->com_len) ;
-	} 
-}
 
 // command to fill form fields with existing row values 
-class CommandEdit extends SingleTableCommand
+class CommandEditContent extends ContentSQLCommand
 {
 	private $obj ; 
 	
 	function Obj() { return $this->obj ; }
 	function Execute()
 	{
-		$this->calc() ;
-		
-		if ($this->post_len>$this->com_len)	
+		if (strlen($this->suffix))	
 		{
 			// only one table updated
 			$query= new SqlQuery() ;
-			$query->add_from($this->settings->Prefix().$this->tabname) ;
+			$query->add_from($this->settings->Prefix().$this->suffix) ;
 			$query->add_select('*') ;
-		    $query->add_select('Id as '.$this->tabname) ;
-			$query->add_where("Id=".$this->update_id) ;
+		    $query->add_select('Id as '.$this->suffix) ;
+			$query->add_where("Id=".$this->value) ;
 			
 			$this->obj=$this->sqlconnect->QueryObject($query->get_query()) ;
 		}
@@ -966,24 +1023,22 @@ class CommandEdit extends SingleTableCommand
 			$query=$query_builder->GetSqlQuery() ;
 			
 			// add Id of edited row and get result
-			$query->add_where($this->settings->Prefix().$this->content->GetName().".Id=".$this->update_id) ;
+			$query->add_where($this->settings->Prefix().$this->content->GetName().".Id=".$this->value) ;
 			$this->obj=$this->sqlconnect->QueryObject($query->get_query()) ;
 		}
 	}
 }
 
-class CommandDelete extends SingleTableCommand
+class CommandDeleteContent extends ContentSQLCommand
 {
 	function Execute()
 	{
-		$this->calc() ;
-	
-		if ($this->post_len>$this->com_len)
+		if (strlen($this->suffix))
 		{
 			// only from one table data can be deleted
 			$query= new SqlQuery() ;
-			$query->add_from($this->settings->Prefix().$this->tabname) ;
-			$query->add_where("Id=".$this->update_id) ;
+			$query->add_from($this->settings->Prefix().$this->suffix) ;
+			$query->add_where("Id=".$this->value) ;
 				
 			// echo $query->get_delete_query() ;
 				
@@ -993,113 +1048,59 @@ class CommandDelete extends SingleTableCommand
 }
 
 
-// dispatcher knows only command names and has command objects to Execute()
-// it works like menu
-class Dispatcher
-{
-	private $commands_array ; // array of named Commands ;
-	
-	function __construct($arr) { $this->commands_array=$arr ; }
-	function ExecuteCommand($name) { $this->commands_array[$name]->Execute() ; }
-	
-	// Executes command if command name exist in POST request
-	function ExecuteFromPOST()
-	{
-		
-		foreach($_POST as $key => $value)
-			if (strpos($key,'Command')!==false)
-				$com_str=$key ;
-		
-		$_POST['command_key']=$com_str ;
-			
-		foreach($this->commands_array as $name => $command)
-			if (strpos($com_str, $name)!==false)
-				$this->ExecuteCommand($name) ;
-	}
-}
-
-
-// GoF "Facade" class to generate web page
-class View
+// Generates web page with content structure as a model
+class PageView
 {
 	use SqlConnectable ;
 	
-	private $form_interface ;
-	
-	function __construct($settings,$connect,$form_interface)
+	protected $form_interface, $imp ;
+	protected $content ;
+	protected $dispatcher ;
+
+	function InitSettings()
 	{
-		$this->SqlConnectableSet($settings, $connect) ;
-		$this->form_interface=$form_interface ;
+		// create settings
+	 	$this->settings=new Settings("sc_", "_content","_state","mainform",
+	 			                     array("StringContent","AttributeTable","MasterTable","MultiDetailTable")) ;
+
+		// create MySqli connection
+		$this->sqlconnect=new MySqliConnector('dollsfun.mysql.ukraine.com.ua','dollsfun_content','93hfkudn', 'dollsfun_content') ;
+
+		// create form interface and imlementation
+		$this->imp=new HtmlFormImp() ;
+		$this->form_interface=new FormInterface($this->imp) ;
 	}
 
 
+	// inits objects before to use in commands
+	function InitObjects() {}
+	
+	function GetCommandsArray() { return array() ; }
+	
+	function GetPage() { return "" ; }
+	
 	function GetView()
 	{
+		$this->InitSettings() ;
+		
 		// create restorer object and use it to restore content structure from sql table
 		$restorer=new ContentRestorer($this->settings,$this->sqlconnect) ;
-		$content=$restorer->Restore() ;
+		$this->content=$restorer->Restore() ;
 		
-		// creating commands from POST request
-		$edit_command=new CommandEdit($this->settings, $this->sqlconnect, $content) ;
-		$insert_command=new CommandInsert($this->settings, $this->sqlconnect, $content) ;
-		$delete_command=new CommandDelete($this->settings, $this->sqlconnect, $content) ;
+		$this->InitObjects() ;
 		
-
-		// print_r($_POST) ;
+		$this->dispatcher=new Dispatcher($this->GetCommandsArray()) ;
 		
 		$post= ($_SERVER['REQUEST_METHOD']=='POST') ;
 		if ($post)
-		{
-			$dispatcher=new Dispatcher(array("Insert" => $insert_command,
-											 "Delete" => $delete_command,
-					                         "Edit" => $edit_command)) ;
-			$dispatcher->ExecuteFromPOST() ;		
-		}
+			$this->dispatcher->ExecuteFromPOST() ;		
 		
-		
-		// create form builder
-		$form_builder=new FormBuilder($this->settings,$this->sqlconnect,$this->form_interface,$edit_command->Obj()) ;
-	
-		// create query builder
-		$query_builder=new QueryBuilder($this->settings) ;
-		
-		// create table head builder
-		$tablehead_builder=new TableHeadBuilder($this->form_interface) ;
-		
-		$builders_array=array($form_builder,$query_builder,$tablehead_builder) ;
-		
-		// create all_builders object, containing all needed builders
-		$all_builders=new Builders($builders_array) ;
-		
-		// parse composite structure with all builders
-		$parser=new ContentParser($all_builders) ;
-		$parser->Parse($content) ;
-	
-		$view=$form_builder->Get() ; // form
-	    $view.=$this->form_interface->Table() ;	
-		$view.=$tablehead_builder->Get() ; // table head
-		
-		// builder and parser to build rows
-		$row_builder=new TableRowBuilder($this->form_interface) ;
-		$row_parser=new ContentParser($row_builder) ;
-				
-		// echo "<br/>".$query_builder->GetQuery() ;
-		
-		$outrows=$this->sqlconnect->QueryObjectIterator($query_builder->GetQuery()) ;
-		for ($outrows->First() ; !$outrows->IsDone() ; $outrows->Next())
-		{
-			$row=$outrows->Current() ;
-			$row_builder->SetRow($row) ;
-			$row_parser->Parse($content) ;
-			$view.=$row_builder->Get() ;
-		}
+		$view='<p><a href="index.php">Content</a>  <a href="structure.php">Structure</a></p>' ;
 
-		$view.=$this->form_interface->Table_end() ;
-		
-		return $view ;
+		return $view.$this->GetPage() ;
 	}
-
 }
+
 
 /*
 $content=new MasterTable('Words',array(

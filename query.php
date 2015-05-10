@@ -100,6 +100,10 @@ class SqlQuery
 	{
 		return "DELETE FROM ".$this->fstr.(strlen($this->wstr) ? " WHERE ".$this->wstr : "") ;
 	}
+	function get_altertable_query()
+	{
+		return "ALTER TABLE" ;
+	}
 }
 
 
