@@ -53,6 +53,7 @@ abstract class Content
 	
 	abstract function IsLeaf() ;
 	function DependsFromParent() { return false ; } 
+	function IsTableContent() { return false ; }
 	
 	function GetSize() { return "" ; }
 	function DisplayChild() { return "" ; }
@@ -178,7 +179,23 @@ abstract class CompositeContent extends Content
 	function CanCascadeDelete() { return false ; }
 }
 
-class MasterTable extends CompositeContent
+
+// root of content structure for specific domain
+class Domain extends CompositeContent
+{
+	function Accept($visitor)
+	{
+		return $visitor->VisitDomain($this) ;
+	}
+}
+
+
+class TableContent extends CompositeContent
+{
+	function IsTableContent() { return true ; }
+}
+
+class MasterTable extends TableContent
 {
 	function Accept($visitor)
 	{
@@ -187,7 +204,7 @@ class MasterTable extends CompositeContent
 	function CanCascadeDelete() { return true ; }
 }
 
-class MultiDetailTable extends CompositeContent
+class MultiDetailTable extends TableContent
 {
 	function DependsFromParent() { return true ; }
 	function CanCascadeDelete() { return true ; }
@@ -198,7 +215,7 @@ class MultiDetailTable extends CompositeContent
 	}
 }
 
-class AttributeTable extends CompositeContent
+class AttributeTable extends TableContent
 {
 	private $filtered_by_child , $filters_output , $current_value ;
 	
@@ -256,6 +273,7 @@ abstract class ContentVisitor
 	function VisitMasterTable($content) { return "" ; } 
 	function VisitMultiDetailTable($content) { return "" ; }
 	function VisitAttributeTable($content) { return "" ; }
+	function VisitDomain($content) { return "" ; }
 } 
 
 abstract class ContentVisitorBeforeAfter extends ContentVisitor
@@ -555,15 +573,9 @@ class SaveElementVisitor extends ContentVisitor
 		$this->query->add_values("FiltersOutput",$content->FiltersOutput()) ; 
 	}
 
-	function VisitMasterTable($content)
-	{
-		$this->VisitCompositeContent($content) ;
-	}
-
-	function VisitMultiDetailTable($content)
-	{
-		$this->VisitCompositeContent($content) ;
-	}
+	function VisitMasterTable($content) { $this->VisitCompositeContent($content) ; }
+	function VisitMultiDetailTable($content) { $this->VisitCompositeContent($content) ; }
+	function VisitDomain($content) { $this->VisitCompositeContent($content) ; }
 }
 	
 
@@ -585,6 +597,7 @@ class RestoreElementVisitor extends ContentVisitor
 	}
 	function VisitMasterTable($content) { $this->VisitCompositeContent($content) ; }
 	function VisitMultiDetailTable($content) { $this->VisitCompositeContent($content) ; }
+	function VisitDomain($content) { $this->VisitCompositeContent($content) ; }
 	
 	function VisitAttributeTable($content)
 	{
@@ -798,7 +811,8 @@ class InsertBuilder extends Builder
 	// inserts data to one user table, asumes dependent tables were processed before
 	function BuildElementStart($element)
 	{
-		if (strlen($_POST[$element->DisplayChild()]))
+		
+		if (strlen($_POST[$element->DisplayChild()]) && $element->IsTableContent())
 		{
 			$query=new SqlQuery ;
 			$query->add_insert($this->settings->Prefix().$element->GetName()) ;
@@ -836,11 +850,8 @@ class InsertBuilder extends Builder
 				// adding Id of new inserted recors to POST
 				$_POST[$element->GetName()]=$this->sqlconnect->InsertId() ;
 			}
-				
 		}
-		
 	}
-
 }
 
 
@@ -1023,7 +1034,7 @@ class CommandEditContent extends ContentSQLCommand
 			$query=$query_builder->GetSqlQuery() ;
 			
 			// add Id of edited row and get result
-			$query->add_where($this->settings->Prefix().$this->content->GetName().".Id=".$this->value) ;
+			$query->add_where($this->settings->Prefix().$this->content->DisplayChild().".Id=".$this->value) ;
 			$this->obj=$this->sqlconnect->QueryObject($query->get_query()) ;
 		}
 	}
