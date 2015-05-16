@@ -8,19 +8,27 @@ class StructureViewBuilder extends Builder
 	
 	private $result ; // table with form elements to return 
 	private $level ;  // current level in content composite
+	private $root_content ;  // root of content stucture
 	
 	protected $output_interface ;
 	
-	private $add_child_name, $add_sibling_name, $edit_name ;
+	private $add_child_name,		// content name after which to draw form to add new content 
+			$add_sibling_name,		// -----
+			$edit_name,				// -----
+			$change_parent_name ;	// -----
 	
 	function SetAddChild($name) { $this->add_child_name=$name ; }
 	function SetAddSibling($name) { $this->add_sibling_name=$name ; }
 	function SetEdit($name) { $this->edit_name=$name ; }
+	function SetChangeParent($name) { $this->change_parent_name=$name ; }
 	
-	function __construct($output_interface,$settings,$connect)
+	function __construct($output_interface,$settings,$connect,$root)
 	{
 		$this->output_interface=$output_interface ;
 		$this->result="" ;
+		$this->root_content=$root ;
+		$this->composites_iterator=$this->root_content->GetCompositesIterator() ;
+		$this->contents_iterator=$this->root_content->GetContentsIterator() ;
 		$this->SqlConnectableSet($settings, $connect) ;
 	}
 	
@@ -80,6 +88,12 @@ class StructureViewBuilder extends Builder
 		$this->result.=$this->output_interface->HiddenInput("Parent",$parent_name) ;
 		$this->result.=$this->output_interface->HiddenInput("AfterChild",$after_child_name) ;
 		
+		// button to insert
+		$this->result.=$this->output_interface->TableCol() ;
+		$this->result.=$this->output_interface->Button($this->settings->MainFormId(),"Insert",
+					                                   "CommandInsertElement","") ;
+		$this->result.=$this->output_interface->TableCol_end() ;
+
 		$this->result.=$this->output_interface->TableRow_end() ;
 	}
 	
@@ -129,6 +143,26 @@ class StructureViewBuilder extends Builder
 					                                       "CommandAddSibling".$element->GetName(),$element->GetName()) ;
 		$this->result.=$this->output_interface->TableCol_end() ;
 		
+		// "change parent" or "new parent" button
+		$this->result.=$this->output_interface->TableCol() ;
+		if ($element->Par())
+			if ($this->change_parent_name==$element->GetName()) // change parent command allready was 
+			{
+				$this->result.=$this->output_interface->Button($this->settings->MainFormId(),"new parent",
+														       "CommandNewParent".$element->GetName(),$element->GetName()) ;
+				$this->result.=$this->output_interface->ListInput("NewParent",$this->composites_iterator,
+				                                                  "name","name","0","NewParent") ;
+				$this->result.=$this->output_interface->ListInput("AfterChild",$this->contents_iterator,
+				                                                  "name","name","0","AfterChild") ;
+			}	
+			else 
+			{
+				$this->result.=$this->output_interface->Button($this->settings->MainFormId(),"change parent",
+														   "CommandChangeParent".$element->GetName(),$element->GetName()) ;
+			}
+
+		$this->result.=$this->output_interface->TableCol_end() ;
+		
 		// "edit" button
 		$this->result.=$this->output_interface->TableCol() ;
 		$this->result.=$this->output_interface->Button($this->settings->MainFormId(),"edit",
@@ -163,7 +197,7 @@ class StructureViewBuilder extends Builder
 	function BuildEnd($content)
 	{
 		$this->result.=$this->output_interface->Table_end() ;
-		$this->result.=$this->output_interface->End("CommandInsertElement") ;
+		$this->result.=$this->output_interface->End("") ;
 	}
 }
 
@@ -193,6 +227,11 @@ class CommandEditElement extends EditContentStructureCommand
 	function Execute() { $this->struct_view_builder->SetEdit($this->suffix) ; }
 }
 
+class CommandChangeParent extends EditContentStructureCommand
+{
+	function Execute() { $this->struct_view_builder->SetChangeParent($this->suffix) ; }
+}
+
 
 // visitor to modify content tables when add
 class StructureAddVisitor extends ContentVisitor
@@ -216,7 +255,7 @@ class ChangeContentStructureCommand extends ContentSQLCommand
 	function Save()
 	{
 		$save_builder=new SaveBuilder($this->settings, $this->sqlconnect) ;
-		$save_parser=new ContentParser($save_builder) ;
+		$save_parser=new ContentParser($save_builder,1) ;
 		$save_parser->Parse($this->content) ;
 	}
 }
@@ -230,7 +269,7 @@ class CommandDeleteElement extends ChangeContentStructureCommand
 		{
 			$element->Par()->DelChild($this->suffix) ;	
 			
-			// preform query to drop or alter table
+			// perform query to drop or alter table
 			if ($element->IsLeaf())
 			{
 				$query="alter table ".$this->settings->Prefix().$element->Par()->GetName()." drop ".$element->GetName() ;
@@ -271,17 +310,41 @@ class CommandInsertElement extends ChangeContentStructureCommand
  	 		// save whole structure
 			$this->Save() ;
  		}
- 	}
- }
+	}
+}
 
 
+class CommandNewParent extends ChangeContentStructureCommand
+{
+	function Execute()
+	{
+		$element=$this->content->GetElementByName($this->suffix) ;
+		if ($element)
+		{
+		    $post_obj=(object)$_POST ;
+			
+			$new_parent=$this->content->GetElementByName($post_obj->NewParent) ;
+			$old_parent=$element->Par() ;
+			
+			$new_parent->AddChild($element,$post_obj->AfterChild) ;
+			$old_parent->DelChild($element->GetName()) ;
+ 	 		
+ 	 		// save whole structure
+			$this->Save() ;
+		}
+	}
+}
+
+ 
+ 
 class StructureView extends PageView
 {
 	private $struct_view_builder ;
 	
 	function InitObjects()
 	{
-		$this->struct_view_builder=new StructureViewBuilder($this->form_interface,$this->settings,$this->sqlconnect) ;
+		$this->struct_view_builder=new StructureViewBuilder($this->form_interface,$this->settings,
+				                                            $this->sqlconnect,$this->content) ;
 	}
 	
 	function GetCommandsArray()
@@ -289,7 +352,9 @@ class StructureView extends PageView
 		return array("CommandAddChild" => new CommandAddChild($this->struct_view_builder),
 		             "CommandAddSibling" => new CommandAddSibling($this->struct_view_builder),
 		             "CommandEditElement" => new CommandEditElement($this->struct_view_builder),
-				     "CommandInsertElement" => new CommandInsertElement($this->settings, $this->sqlconnect, $this->content),
+		             "CommandChangeParent" => new CommandChangeParent($this->struct_view_builder),
+					 "CommandInsertElement" => new CommandInsertElement($this->settings, $this->sqlconnect, $this->content),
+				     "CommandNewParent" => new CommandNewParent($this->settings, $this->sqlconnect, $this->content),
 					 "CommandDeleteElement" => new CommandDeleteElement($this->settings, $this->sqlconnect, $this->content)) ;
 		
 	}
@@ -297,6 +362,7 @@ class StructureView extends PageView
 	function GetPage()
 	{
 		$parser=new ContentParser($this->struct_view_builder) ;
+		
 		$parser->Parse($this->content) ;
 		return $this->struct_view_builder->Get() ;
 	}

@@ -13,6 +13,9 @@ class ContentView extends PageView
 
 	function GetPage()
 	{
+		// master table to display
+		$master=$this->content->GetElementByName($this->content->DisplayChild()) ;
+			
 		// create form builder
 		$form_builder=new FormBuilder($this->settings,$this->sqlconnect,$this->form_interface,
 				                      $this->dispatcher->GetCommand("CommandEditContent")->Obj()) ;
@@ -28,7 +31,7 @@ class ContentView extends PageView
 		
 		// parse composite structure with all builders
 		$parser=new ContentParser($all_builders) ;
-		$parser->Parse($this->content) ;
+		$parser->Parse($master) ;
 		
 		$view=$form_builder->Get() ; // form
 	    $view.=$this->form_interface->Table() ;	
@@ -45,7 +48,7 @@ class ContentView extends PageView
 		{
 			$row=$outrows->Current() ;
 			$row_builder->SetRow($row) ;
-			$row_parser->Parse($this->content) ;
+			$row_parser->Parse($master) ;
 			$view.=$row_builder->Get() ;
 		}
 

@@ -54,6 +54,7 @@ abstract class Content
 	abstract function IsLeaf() ;
 	function DependsFromParent() { return false ; } 
 	function IsTableContent() { return false ; }
+	function IsReference() { return false ; }
 	
 	function GetSize() { return "" ; }
 	function DisplayChild() { return "" ; }
@@ -62,7 +63,7 @@ abstract class Content
 	
 	
 	
-	private $name ;
+	public $name ;
 	private $par ;
 	
 	protected $children ;
@@ -100,7 +101,26 @@ abstract class Content
 		return null ;
 	}
 	
+
+	function GetArrayOfObjects($composites=0)
+	{
+		$arr=array() ;
+		
+		if (!$composites || !$this->IsLeaf())
+			$arr[]=$this ;
+		
+		$iterator=$this->GetChildrenIterator() ;
+		for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
+			$arr=array_merge($arr,$iterator->Current()->GetArrayOfObjects($composites)) ;
+		
+		return $arr ;
+	}
+
+	function GetCompositesIterator() { return new GofArrayIterator($this->GetArrayOfObjects(1)) ; }
+	function GetContentsIterator() { return new GofArrayIterator($this->GetArrayOfObjects()) ; }
 }
+
+
 
 abstract class SimpleContent extends Content 
 { 
@@ -234,6 +254,17 @@ class AttributeTable extends TableContent
 }
 
 
+class TableReference extends CompositeContent
+{
+	function IsReference() { return true ; }
+	
+	function Accept($visitor)
+	{
+		return $visitor->VisitTableReference($this) ;
+	}
+}
+
+
 // GoF "Decorator" class family 
 abstract class FormDecorator extends CompositeContent
 {
@@ -274,6 +305,7 @@ abstract class ContentVisitor
 	function VisitMultiDetailTable($content) { return "" ; }
 	function VisitAttributeTable($content) { return "" ; }
 	function VisitDomain($content) { return "" ; }
+	function VisitTableReference($content) { return "" ; }
 } 
 
 abstract class ContentVisitorBeforeAfter extends ContentVisitor
@@ -576,6 +608,7 @@ class SaveElementVisitor extends ContentVisitor
 	function VisitMasterTable($content) { $this->VisitCompositeContent($content) ; }
 	function VisitMultiDetailTable($content) { $this->VisitCompositeContent($content) ; }
 	function VisitDomain($content) { $this->VisitCompositeContent($content) ; }
+	function VisitTableReference($content) { $this->VisitCompositeContent($content) ; }
 }
 	
 
@@ -598,6 +631,7 @@ class RestoreElementVisitor extends ContentVisitor
 	function VisitMasterTable($content) { $this->VisitCompositeContent($content) ; }
 	function VisitMultiDetailTable($content) { $this->VisitCompositeContent($content) ; }
 	function VisitDomain($content) { $this->VisitCompositeContent($content) ; }
+	function VisitTableReference($content) { $this->VisitCompositeContent($content) ; }
 	
 	function VisitAttributeTable($content)
 	{
@@ -859,22 +893,26 @@ class InsertBuilder extends Builder
 class ContentParser
 {
 	private $builders ;
+	private $stop_reference ; // if set to non-zero, stops parsing on reference content 
 	
-	function __construct($builders) { $this->builders=$builders ; }
+	function __construct($builders, $stop=0) { $this->builders=$builders ; $this->stop_reference=$stop ; }
 	
+	// "normal" parse
 	function ParseElement($content_element)
 	{
 		$this->builders->BuildElementStart($content_element) ;
 		
-		//echo "<br/>I: "  ; print_r($content_element->GetName()) ;
-		$iterator=$content_element->GetChildrenIterator() ;
-		for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
-			$this->ParseElement($iterator->Current()) ;
-				
+		if (!stop_reference || !$content_element->IsReference())
+		{
+			$iterator=$content_element->GetChildrenIterator() ;
+			for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
+				$this->ParseElement($iterator->Current()) ;
+		}
+		
 		$this->builders->BuildElementEnd($content_element) ;
 	}
 
-		
+	// main function of normal parse	
 	function Parse($content)
 	{
 		$this->builders->BuildStart() ;
@@ -882,6 +920,8 @@ class ContentParser
 		$this->builders->BuildEnd() ;
 	}
 
+	
+	// parse by dependency relation
 	function ParseCompositesByDependency($content_element)
 	{
 		$iterator=$content_element->GetChildrenIterator() ;

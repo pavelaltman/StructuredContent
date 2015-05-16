@@ -31,7 +31,10 @@ abstract class FormImp
 class HtmlFormImp extends FormImp
 {
 	function Header($url,$id) { return '<form action="'.$url.'" id="'.$id.'" method="post">' ; }
-	function End($submit_name) { return '<p><input type="submit" name="'.$submit_name.'"/></p></form>' ; } 
+	function End($submit_name) 
+	{ 
+		return (strlen($submit_name) ? '<p><input type="submit" name="'.$submit_name.'"/></p>' : '').'</form>' ; 
+	} 
 	function TextInput($name,$size,$value="") 
 	{ 
 		return '<input type="text" name="'.$name.'" size="'.$size.'" value="'.$value.'">' ; 
