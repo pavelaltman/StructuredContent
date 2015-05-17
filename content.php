@@ -83,6 +83,7 @@ abstract class Content
 	function GetChildrenIterator() { return new GofArrayIterator($this->children) ; }
 	function GetName() { return $this->name ; }
 	function Par() { return $this->par ; }
+	function TableName() { return $this->name ; } // overloaded in Reference
 	function SetPar($par) { $this->par=$par ; }
 	
 	function GetElementByName($name)
@@ -169,7 +170,10 @@ abstract class CompositeContent extends Content
 		}			
 		
 		$ins=array($Child->GetName() => $Child) ;
-		array_splice($this->children, $pos, 0, $ins);
+		
+		$this->children=array_slice($this->children,0,$pos,$true)+
+		                            $ins+array_slice($this->children,$pos,count($this->children)-1,$true) ;
+		//array_splice($this->children, $pos, 0, $ins);
 		
 		// print_r($this->children) ;
 		// $this->children[$Child->GetName()]=$Child ; 
@@ -257,6 +261,7 @@ class AttributeTable extends TableContent
 class TableReference extends CompositeContent
 {
 	function IsReference() { return true ; }
+	function TableName() { return $this->Par()->GetName() ; }
 	
 	function Accept($visitor)
 	{
@@ -566,7 +571,7 @@ class QueryElementVisitor extends ContentVisitor
 	{ 
 		$tabname=$this->settings->Prefix().$at->GetName() ;
 		$this->query->add_join($tabname,
-				               $tabname.'.Id='.$this->settings->Prefix().$at->Par()->GetName().'.'.$at->GetName()) ;
+				               $tabname.'.Id='.$this->settings->Prefix().$at->Par()->TableName().'.'.$at->GetName()) ;
 		
 		$this->AddIdToQuery($at) ;
 		
@@ -575,7 +580,7 @@ class QueryElementVisitor extends ContentVisitor
 		{
 			$value=$at->CurrentValue() ;
 			if ($value)
-				$this->query->add_where($this->settings->Prefix().$at->Par()->GetName().'.'.$at->GetName().'='.$value) ;
+				$this->query->add_where($this->settings->Prefix().$at->Par()->TableName().'.'.$at->GetName().'='.$value) ;
 		}
 	}
 }
@@ -631,7 +636,11 @@ class RestoreElementVisitor extends ContentVisitor
 	function VisitMasterTable($content) { $this->VisitCompositeContent($content) ; }
 	function VisitMultiDetailTable($content) { $this->VisitCompositeContent($content) ; }
 	function VisitDomain($content) { $this->VisitCompositeContent($content) ; }
-	function VisitTableReference($content) { $this->VisitCompositeContent($content) ; }
+	
+	function VisitTableReference($content) 
+	{ 
+		$this->VisitCompositeContent($content) ; 
+	}
 	
 	function VisitAttributeTable($content)
 	{
@@ -902,7 +911,7 @@ class ContentParser
 	{
 		$this->builders->BuildElementStart($content_element) ;
 		
-		if (!stop_reference || !$content_element->IsReference())
+		if (!$this->stop_reference || !$content_element->IsReference())
 		{
 			$iterator=$content_element->GetChildrenIterator() ;
 			for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
@@ -943,6 +952,25 @@ class ContentParser
 			$el=$iterator->Current() ;
 			if ($el->DependsFromParent() && !$el->IsLeaf())
 				$this->ParseCompositesByDependency($el) ;
+		}
+	}
+}
+
+
+// adds children to refs
+class ReferencesBuilder extends Builder
+{
+	private $root ;
+	
+	function __construct($root) { $this->root=$root ; }
+	
+	function BuildElementStart($element) 
+	{	
+		if ($element->IsReference())
+		{
+			$chld=$this->root->GetElementByName($element->DisplayChild()) ;
+			$element->AddChild($chld) ; 
+			//print_r($element) ;
 		}
 	}
 }
@@ -995,6 +1023,12 @@ class ContentRestorer
 			array_splice($stack,0,$row->Chldrn) ; // shifts stack from used children
 			array_unshift($stack,$current_obj) ; // unshift new object to stack 
 		}
+		
+		// adding children to references
+		$ref_builder=new ReferencesBuilder($current_obj) ;
+		$ref_parser=new ContentParser($ref_builder) ;
+		$ref_parser->Parse($current_obj) ;
+		
 		return $current_obj ;
 	}
 	
@@ -1070,11 +1104,13 @@ class CommandEditContent extends ContentSQLCommand
 			// Get sql query from content structure  
 			$query_builder=new QueryBuilder($this->settings) ;
 			$parser=new ContentParser($query_builder) ;
-			$parser->Parse($this->content) ;
-			$query=$query_builder->GetSqlQuery() ;
 			
+			$master=$this->content->GetElementByName($this->content->DisplayChild()) ;
+			$parser->Parse($master) ;
+			$query=$query_builder->GetSqlQuery() ;
+
 			// add Id of edited row and get result
-			$query->add_where($this->settings->Prefix().$this->content->DisplayChild().".Id=".$this->value) ;
+			$query->add_where($this->settings->Prefix().$master->GetName().".Id=".$this->value) ;
 			$this->obj=$this->sqlconnect->QueryObject($query->get_query()) ;
 		}
 	}
