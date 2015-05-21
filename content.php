@@ -83,7 +83,7 @@ abstract class Content
 	function GetChildrenIterator() { return new GofArrayIterator($this->children) ; }
 	function GetName() { return $this->name ; }
 	function Par() { return $this->par ; }
-	function TableName() { return $this->name ; } // overloaded in Reference
+	function UpperTableName() { return $this->name ; } // overloaded in Reference
 	function SetPar($par) { $this->par=$par ; }
 	
 	function GetElementByName($name)
@@ -172,7 +172,7 @@ abstract class CompositeContent extends Content
 		$ins=array($Child->GetName() => $Child) ;
 		
 		$this->children=array_slice($this->children,0,$pos,$true)+
-		                            $ins+array_slice($this->children,$pos,count($this->children)-1,$true) ;
+		                            $ins+array_slice($this->children,$pos,count($this->children)-$pos,$true) ;
 		//array_splice($this->children, $pos, 0, $ins);
 		
 		// print_r($this->children) ;
@@ -197,6 +197,7 @@ abstract class CompositeContent extends Content
 	}
 
 	function DisplayChild() { return $this->display_child ; }
+	function DisplayChildObject() { return $this->children[$this->DisplayChild()] ; }
 	
 	function IsLeaf() { return false ;}
 	
@@ -258,10 +259,13 @@ class AttributeTable extends TableContent
 }
 
 
+// contains single child which is reference to table
 class TableReference extends CompositeContent
 {
 	function IsReference() { return true ; }
-	function TableName() { return $this->Par()->GetName() ; }
+	
+	// overloads regular UpperTableName(), returns parent's 
+	function UpperTableName() { return $this->Par()->GetName() ; }
 	
 	function Accept($visitor)
 	{
@@ -270,36 +274,19 @@ class TableReference extends CompositeContent
 }
 
 
-// GoF "Decorator" class family 
-abstract class FormDecorator extends CompositeContent
+// defines view to show content
+class ViewContent extends CompositeContent
 {
-	private $childkey ;
-	function __construct($name,$Child,$childkey) 
-	{ 
-		$this->childkey= $childkey ; 
-		parent::__construct($name,$Child) ; 
-	}
 	
-	function GetChild() { return $this->children[$this->childkey] ; }
-
-	function AddChild(Content $Child) {} 
-	function DelChild($name) {}
-	function ReplaceChild_keepname($name,$newchild) 
-	{ 
-		$this->children[$this->childkey]=$newchild ; 
-	}
-	function ReplaceChild_newname($name,$newname,$newchild)
-	{
-		$this->children[$newname]=$newchild ;
-		unset($this->children[$this->childkey]) ;
-		$this->children[$this->childkey]=$newname ;
-	}
 }
 
-
-class GroupDecorator extends FormDecorator
+class MasterTableViewContent extends ViewContent
 {
-}
+	function Accept($visitor)
+	{
+		return $visitor->VisitMasterTableViewContent($this) ;
+	}
+} 
 
 
 // GoF "Visitor" classes to get specific information from content structure
@@ -311,6 +298,7 @@ abstract class ContentVisitor
 	function VisitAttributeTable($content) { return "" ; }
 	function VisitDomain($content) { return "" ; }
 	function VisitTableReference($content) { return "" ; }
+	function VisitMasterTableViewContent($content) { return "" ; }
 } 
 
 abstract class ContentVisitorBeforeAfter extends ContentVisitor
@@ -571,7 +559,7 @@ class QueryElementVisitor extends ContentVisitor
 	{ 
 		$tabname=$this->settings->Prefix().$at->GetName() ;
 		$this->query->add_join($tabname,
-				               $tabname.'.Id='.$this->settings->Prefix().$at->Par()->TableName().'.'.$at->GetName()) ;
+				               $tabname.'.Id='.$this->settings->Prefix().$at->Par()->UpperTableName().'.'.$at->GetName()) ;
 		
 		$this->AddIdToQuery($at) ;
 		
@@ -580,7 +568,7 @@ class QueryElementVisitor extends ContentVisitor
 		{
 			$value=$at->CurrentValue() ;
 			if ($value)
-				$this->query->add_where($this->settings->Prefix().$at->Par()->TableName().'.'.$at->GetName().'='.$value) ;
+				$this->query->add_where($this->settings->Prefix().$at->Par()->UpperTableName().'.'.$at->GetName().'='.$value) ;
 		}
 	}
 }
@@ -614,6 +602,7 @@ class SaveElementVisitor extends ContentVisitor
 	function VisitMultiDetailTable($content) { $this->VisitCompositeContent($content) ; }
 	function VisitDomain($content) { $this->VisitCompositeContent($content) ; }
 	function VisitTableReference($content) { $this->VisitCompositeContent($content) ; }
+	function VisitMasterTableViewContent($content) { $this->VisitCompositeContent($content) ; }
 }
 	
 
@@ -636,6 +625,7 @@ class RestoreElementVisitor extends ContentVisitor
 	function VisitMasterTable($content) { $this->VisitCompositeContent($content) ; }
 	function VisitMultiDetailTable($content) { $this->VisitCompositeContent($content) ; }
 	function VisitDomain($content) { $this->VisitCompositeContent($content) ; }
+	function VisitMasterTableViewContent($content) { $this->VisitCompositeContent($content) ; }
 	
 	function VisitTableReference($content) 
 	{ 
@@ -1148,7 +1138,9 @@ class PageView
 	{
 		// create settings
 	 	$this->settings=new Settings("sc_", "_content","_state","mainform",
-	 			                     array("StringContent","AttributeTable","MasterTable","MultiDetailTable")) ;
+		                              array("StringContent","AttributeTable","MasterTable","MultiDetailTable",
+		                              		"TableReference","MasterTableViewContent"
+		                              )) ;
 
 		// create MySqli connection
 		$this->sqlconnect=new MySqliConnector('dollsfun.mysql.ukraine.com.ua','dollsfun_content','93hfkudn', 'dollsfun_content') ;

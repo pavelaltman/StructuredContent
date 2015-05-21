@@ -86,6 +86,11 @@ class StructureViewBuilder extends Builder
 		$this->result.=$this->output_interface->TextInput("Size",3) ;
 		$this->result.=$this->output_interface->TableCol_end() ;
 		
+		// DisplayChild
+		$this->result.=$this->output_interface->TableCol() ;
+		$this->result.=$this->output_interface->TextInput("DisplayChild",20) ;
+		$this->result.=$this->output_interface->TableCol_end() ;
+		
 		// hidden inputs, parent name and name of child to insert after 
 		$this->result.=$this->output_interface->HiddenInput("Parent",$parent_name) ;
 		$this->result.=$this->output_interface->HiddenInput("AfterChild",$after_child_name) ;
@@ -315,6 +320,8 @@ class CommandInsertElement extends ChangeContentStructureCommand
  	function Execute()
  	{
 		$post_obj=(object)$_POST ;
+		
+		// print_r($post_obj) ;
 
 		//add new child in proper place
  		$element=$this->content->GetElementByName($post_obj->Parent) ;
@@ -384,7 +391,7 @@ class CommandNewParent extends ChangeContentStructureCommand
 
  
  
-class StructureView extends PageView
+class StructurePageView extends PageView
 {
 	private $struct_view_builder ;
 	
@@ -408,13 +415,13 @@ class StructureView extends PageView
 	
 	function GetPage()
 	{
-		$parser=new ContentParser($this->struct_view_builder) ;
+		$parser=new ContentParser($this->struct_view_builder,1) ;
 		
 		$parser->Parse($this->content) ;
 		return $this->struct_view_builder->Get() ;
 	}
 }
 
-$view=new StructureView() ;
+$view=new StructurePageView() ;
 echo $view->GetView() ;
 ?>

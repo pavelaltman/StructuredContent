@@ -1,24 +1,27 @@
 <?php
 require_once 'content.php';
 
-class ContentView extends PageView
+class GetViewVisitor extends ContentVisitor
 {
-	function GetCommandsArray()
+	use SqlConnectable ;
+	
+	protected $form_interface ;
+	
+	function __construct($settings,$sqlconnect,$interface,$dispatcher)
 	{
-		return array("CommandEditContent" => new CommandEditContent($this->settings, $this->sqlconnect, $this->content),
-		             "CommandInsertContent" => new CommandInsertContent($this->settings, $this->sqlconnect, $this->content),
-		             "CommandDeleteContent" => new CommandDeleteContent($this->settings, $this->sqlconnect, $this->content)) ;
-		
+		$this->form_interface=$interface ;
+		$this->dispatcher=$dispatcher ;
+		$this->SqlConnectableSet($settings, $sqlconnect) ;
 	}
 
-	function GetPage()
+	function VisitMasterTableViewContent($viewcontent)
 	{
-		// master table to display
-		$master=$this->content->GetElementByName($this->content->DisplayChild()) ;
-			
+		$master=$viewcontent->DisplayChildObject()->DisplayChildObject() ;
+		
 		// create form builder
 		$form_builder=new FormBuilder($this->settings,$this->sqlconnect,$this->form_interface,
-				                      $this->dispatcher->GetCommand("CommandEditContent")->Obj()) ;
+				$this->dispatcher->GetCommand("CommandEditContent")->Obj()) ;
+		
 		// create query builder
 		$query_builder=new QueryBuilder($this->settings) ;
 		
@@ -34,13 +37,13 @@ class ContentView extends PageView
 		$parser->Parse($master) ;
 		
 		$view=$form_builder->Get() ; // form
-	    $view.=$this->form_interface->Table() ;	
+		$view.=$this->form_interface->Table() ;
 		$view.=$tablehead_builder->Get() ; // table head
 		
 		// builder and parser to build rows
 		$row_builder=new TableRowBuilder($this->form_interface) ;
 		$row_parser=new ContentParser($row_builder) ;
-				
+		
 		// echo "<br/>".$query_builder->GetQuery() ;
 		
 		$outrows=$this->sqlconnect->QueryObjectIterator($query_builder->GetQuery()) ;
@@ -51,13 +54,36 @@ class ContentView extends PageView
 			$row_parser->Parse($master) ;
 			$view.=$row_builder->Get() ;
 		}
-
-		$view.=$this->form_interface->Table_end() ;
 		
+		$view.=$this->form_interface->Table_end() ;
 		return $view ;
 	}
 }
 
-$view=new ContentView() ;
+
+class ContentPageView extends PageView
+{
+	function GetCommandsArray()
+	{
+		return array("CommandEditContent" => new CommandEditContent($this->settings, $this->sqlconnect, $this->content),
+		             "CommandInsertContent" => new CommandInsertContent($this->settings, $this->sqlconnect, $this->content),
+		             "CommandDeleteContent" => new CommandDeleteContent($this->settings, $this->sqlconnect, $this->content)) ;
+		
+	}
+
+	function GetPage()
+	{
+		if (array_key_exists('view',$_GET))
+			$view_name=$_GET['view'] ; 
+		else
+			$view_name=$this->content->DisplayChild() ;
+		
+		$view_object=$this->content->GetElementByName($view_name) ;
+		$view_visitor=new GetViewVisitor($this->settings, $this->sqlconnect, $this->form_interface, $this->dispatcher) ;		
+		return $view_object->Accept($view_visitor) ;
+	}
+}
+
+$view=new ContentPageView() ;
 echo $view->GetView() ;
 ?>
