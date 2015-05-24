@@ -206,7 +206,9 @@ class StructureViewBuilder extends Builder
 		
 		// builds form row if CommandAddSibling was invoked
 		if ($this->add_sibling_name==$element->GetName())
+		{
 			$this->BuildFormRow($element->Par()->GetName(),$element->GetName()) ;
+		}
 		
 	}
 
@@ -258,6 +260,12 @@ class StructureAddVisitor extends ContentVisitor
 	function __construct($settings,$table_create=0) { $this->settings=$settings ; $this->table_create=$table_create ; }
 	
 	function VisitString($string)
+	{
+		return "alter table ".$this->settings->Prefix().$string->Par()->GetName().
+		       " add ".$string->GetName()." char(".$string->GetSize().")" ;
+	}
+
+	function VisitMasterTable($string)
 	{
 		return "alter table ".$this->settings->Prefix().$string->Par()->GetName().
 		       " add ".$string->GetName()." char(".$string->GetSize().")" ;
@@ -321,6 +329,9 @@ class CommandInsertElement extends ChangeContentStructureCommand
  	{
 		//add new child in proper place
  		$element=$this->content->GetElementByName($this->post_obj->Parent) ;
+ 		
+ 		// print_r($this->post_obj) ;
+ 		
  		if ($element)
  		{
  	 		$classname=$this->post_obj->ClassName ;

@@ -94,14 +94,16 @@ abstract class Content
 		if ($this->GetName()==$name) 
 			return $this ;
 		
-		$iterator=$this->GetChildrenIterator() ;
-		for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
+		if (!$this->IsReference())
 		{
-			$ret=$iterator->Current()->GetElementByName($name) ;
-			if ($ret!=null)
-				return $ret ;		
-		}		
-		
+			$iterator=$this->GetChildrenIterator() ;
+			for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
+			{
+				$ret=$iterator->Current()->GetElementByName($name) ;
+				if ($ret!=null)
+					return $ret ;		
+			}		
+		}
 		return null ;
 	}
 	
@@ -113,10 +115,12 @@ abstract class Content
 		if (!$composites || !$this->IsLeaf())
 			$arr[]=$this ;
 		
-		$iterator=$this->GetChildrenIterator() ;
-		for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
-			$arr=array_merge($arr,$iterator->Current()->GetArrayOfObjects($composites)) ;
-		
+		if (!$this->IsReference())
+		{
+			$iterator=$this->GetChildrenIterator() ;
+			for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
+				$arr=array_merge($arr,$iterator->Current()->GetArrayOfObjects($composites)) ;
+		}
 		return $arr ;
 	}
 
@@ -157,7 +161,8 @@ abstract class CompositeContent extends Content
 	function SetDisplayChild($display_child) { $this->display_child=$display_child ; }
 	function AddChild(Content $Child,$after_child) 
 	{  
-		$Child->SetPar($this) ;
+		if (!$this->IsReference())
+			$Child->SetPar($this) ;
 		
 		// find $after_child position in children array
 		$pos=0 ;
@@ -886,7 +891,7 @@ class InsertBuilder extends Builder
 				// Table Id already exists in POST, so it is update
 				$query->add_where("Id=".$_POST[$element->GetName()]) ;
 
-				echo "<br/>".$query->get_update_query() ;
+				// echo "<br/>".$query->get_update_query() ;
 				
 				$this->sqlconnect->SimpleQuery($query->get_update_query()) ;
 			}

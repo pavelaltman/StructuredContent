@@ -46,7 +46,7 @@ class GetViewVisitor extends ContentVisitor
 		$row_builder=new TableRowBuilder($this->form_interface) ;
 		$row_parser=new ContentParser($row_builder) ;
 		
-		// echo "<br/>".$query_builder->GetQuery() ;
+		echo "<br/>".$query_builder->GetQuery() ;
 		
 		$outrows=$this->sqlconnect->QueryObjectIterator($query_builder->GetQuery()) ;
 		for ($outrows->First() ; !$outrows->IsDone() ; $outrows->Next())
