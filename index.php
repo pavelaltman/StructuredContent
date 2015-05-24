@@ -21,7 +21,7 @@ class GetViewVisitor extends ContentVisitor
 		$master=$viewcontent->MasterTableObject() ;
 
 		// create form builder
-		$form_builder=new FormBuilder($this->settings,$this->sqlconnect,$this->form_interface,
+		$form_builder=new FormBuilder($this->settings,$this->sqlconnect,$this->form_interface,$viewcontent->GetName(),
 				$this->dispatcher->GetCommand("CommandEditContent")->Obj()) ;
 		
 		// create query builder
@@ -85,10 +85,10 @@ class ContentPageView extends PageView
 			$view_name=$this->content->DisplayChild() ;
 
 		
-		$view_visitor=new GetViewVisitor($this->settings, $this->sqlconnect,
-		                            	 $this->form_interface, $this->dispatcher) ;
-		
 		$view_object=$this->content->GetElementByName($view_name) ;
+
+		
+		$view_visitor=new GetViewVisitor($this->settings, $this->sqlconnect,$this->form_interface, $this->dispatcher) ;
 		return $view_object->Accept($view_visitor) ;
 	}
 }

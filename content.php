@@ -83,8 +83,11 @@ abstract class Content
 	function GetChildrenIterator() { return new GofArrayIterator($this->children) ; }
 	function GetName() { return $this->name ; }
 	function Par() { return $this->par ; }
-	function UpperTableName() { return $this->name ; } // overloaded in Reference
 	function SetPar($par) { $this->par=$par ; }
+	
+	// useful functions to bypass reference in traversing 
+	function UpperTableName() { return $this->name ; } // overloaded in Reference
+	function LowerName() { return $this->name; } // overloaded in Reference
 	
 	function GetElementByName($name)
 	{
@@ -266,6 +269,9 @@ class TableReference extends CompositeContent
 	
 	// overloads regular UpperTableName(), returns parent's 
 	function UpperTableName() { return $this->Par()->GetName() ; }
+	
+	// overloads regular LowerName(), returns childs's
+	function LowerName() { return $this->DisplayChildObject()->GetName() ; }
 	
 	function Accept($visitor)
 	{
@@ -700,17 +706,24 @@ class FormBuilder extends HtmlBuilder
 {
 	use SqlConnectable ;
 	
-	function __construct($settings,$sqlconnect,$form_interface,$edit_obj)
+	private $view_name ;
+	
+	function __construct($settings,$sqlconnect,$form_interface,$view_name,$edit_obj)
 	{
 		$this->before_visitor=new FormElementVisitor($settings,$sqlconnect,$form_interface,$edit_obj) ;
 		$this->after_visitor=new FormElementVisitor($settings,$sqlconnect,$form_interface,$edit_obj,1) ;
 		$this->SqlConnectableSet($settings, $sqlconnect) ;
+		$this->view_name=$view_name ;
 		parent::__construct($form_interface) ;
 	}
 	
 	// implementing builder interface
 	function BuildStart() { $this->result.=$this->output_interface->Header($this->settings->MainFormId()) ; }
-	function BuildEnd() { $this->result.=$this->output_interface->End("CommandInsertContent") ; }
+	function BuildEnd() 
+	{ 
+		$this->result.=$this->output_interface->HiddenInput('view',$this->view_name) ;
+		$this->result.=$this->output_interface->End("CommandInsertContent") ; 
+	}
 }
 
 
@@ -827,7 +840,10 @@ class SaveBuilder extends Builder
 		$element->Accept($this->save_visitor) ; // adding class-specific fields to query 
 		
 		$this->query->add_values("Ord",++$this->order) ; // adding order
-		$this->query->add_values("Chldrn",$element->GetChildrenIterator()->Num()) ; // adding children count
+		
+		// adding children count, if reference force to zero
+		$chld_num=$element->IsReference() ? 0 : $element->GetChildrenIterator()->Num() ; 
+		$this->query->add_values("Chldrn",$chld_num) ;
 		
 		$this->query->add_duplicate("Ord=".$this->order) ; // if allready exists then update order and number of children
 		$this->query->add_duplicate("Chldrn=".$element->GetChildrenIterator()->Num()) ;
@@ -858,7 +874,7 @@ class InsertBuilder extends Builder
 			{
 				$ch=$It->Current() ;
 				if (!$ch->DependsFromParent())
-					$query->add_values($ch->GetName(), $this->sqlconnect->Esc($_POST[$ch->GetName()])) ;
+					$query->add_values($ch->LowerName(), $this->sqlconnect->Esc($_POST[$ch->LowerName()])) ;
 			}
 			// adding parent table if this depends from parent
 			if ($element->DependsFromParent())
@@ -870,7 +886,7 @@ class InsertBuilder extends Builder
 				// Table Id already exists in POST, so it is update
 				$query->add_where("Id=".$_POST[$element->GetName()]) ;
 
-				// echo "<br/>".$query->get_update_query() ;
+				echo "<br/>".$query->get_update_query() ;
 				
 				$this->sqlconnect->SimpleQuery($query->get_update_query()) ;
 			}
@@ -1028,44 +1044,47 @@ class ContentRestorer
 
 
 
-// commands to do smth with or using content structure
-abstract class ContentCommand extends POSTCommand 
-{
-	protected $content ;
-	
-	function __construct($content) 
-	{ 
-		$this->content=$content ;
-		parent::__construct() ; 
-	} 
-}
-
 // content command with sql operations
-abstract class ContentSQLCommand extends ContentCommand
+abstract class ContentSQLCommand extends POSTCommand
 {
 	use SqlConnectable ;
 
+	protected $content ;
+	
 	function __construct($settings,$connect,$content)
 	{
-		parent::__construct($content) ;
+		$this->content=$content ;
+		parent::__construct() ;
 		$this->SqlConnectableSet($settings, $connect) ;
 	}
 }
 
+class ContentPageViewCommand extends ContentSQLCommand
+{
+	protected $master ;
+	
+	function SetMaster()
+	{
+		$view_object=$this->content->GetElementByName($this->post_obj->view) ;
+		$this->master=$view_object->MasterTableObject() ;
+	}
+}
 
 // command to insert form data to user tables 
-class CommandInsertContent extends ContentSQLCommand
+class CommandInsertContent extends ContentPageViewCommand
 {
 	function Execute()
 	{
+		$this->SetMaster() ;
+		
 		$insert_builder=new InsertBuilder($this->settings,$this->sqlconnect) ;
 		$insert_parser=new ContentParser($insert_builder) ;
-		$insert_parser->ParseCompositesByDependency($this->content) ;
+		$insert_parser->ParseCompositesByDependency($this->master) ;
 			
 		// copy values from $_POST and save to state table
 		$post_builder=new POSTBuilder($this->settings,$this->sqlconnect) ;
 		$post_parser=new ContentParser($post_builder) ;
-		$post_parser->Parse($this->content) ;
+		$post_parser->Parse($this->master) ;
 	}
 }
 
@@ -1073,7 +1092,7 @@ class CommandInsertContent extends ContentSQLCommand
 
 // command to fill form fields with existing row values
 // it queries data and store it in $obj 
-class CommandEditContent extends ContentSQLCommand
+class CommandEditContent extends ContentPageViewCommand
 {
 	private $obj ; 
 	
@@ -1095,26 +1114,25 @@ class CommandEditContent extends ContentSQLCommand
 		{
 			// all tables updated, find master table object and build query
 			
+			$this->SetMaster() ;
+			
 			// Get sql query from content structure  
 			$query_builder=new QueryBuilder($this->settings) ;
 			$parser=new ContentParser($query_builder) ;
 			
-			print_r($this->post_obj) ;
+			// print_r($this->post_obj) ;
 			
-			$view_object=$this->content->GetElementByName($this->post_obj->view) ;
-			$master=$view_object->MasterTableObject() ;
-			
-			$parser->Parse($master) ;
+			$parser->Parse($this->master) ;
 			$query=$query_builder->GetSqlQuery() ;
 
 			// add Id of edited row and get result
-			$query->add_where($this->settings->Prefix().$master->GetName().".Id=".$this->value) ;
+			$query->add_where($this->settings->Prefix().$this->master->GetName().".Id=".$this->value) ;
 			$this->obj=$this->sqlconnect->QueryObject($query->get_query()) ;
 		}
 	}
 }
 
-class CommandDeleteContent extends ContentSQLCommand
+class CommandDeleteContent extends ContentPageViewCommand
 {
 	function Execute()
 	{
