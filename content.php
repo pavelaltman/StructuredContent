@@ -282,6 +282,8 @@ class ViewContent extends CompositeContent
 
 class MasterTableViewContent extends ViewContent
 {
+	function MasterTableObject() { return $this->DisplayChildObject()->DisplayChildObject() ; }
+	
 	function Accept($visitor)
 	{
 		return $visitor->VisitMasterTableViewContent($this) ;
@@ -289,7 +291,7 @@ class MasterTableViewContent extends ViewContent
 } 
 
 
-// GoF "Visitor" classes to get specific information from content structure
+// GoF "Visitor" classes to get specific information from content structure, or do specific thingth with it
 abstract class ContentVisitor
 {
 	function VisitString($content) { return "" ; } 
@@ -1033,7 +1035,8 @@ abstract class ContentCommand extends POSTCommand
 	
 	function __construct($content) 
 	{ 
-		$this->content=$content ; 
+		$this->content=$content ;
+		parent::__construct() ; 
 	} 
 }
 
@@ -1068,7 +1071,8 @@ class CommandInsertContent extends ContentSQLCommand
 
 
 
-// command to fill form fields with existing row values 
+// command to fill form fields with existing row values
+// it queries data and store it in $obj 
 class CommandEditContent extends ContentSQLCommand
 {
 	private $obj ; 
@@ -1078,7 +1082,7 @@ class CommandEditContent extends ContentSQLCommand
 	{
 		if (strlen($this->suffix))	
 		{
-			// only one table updated
+			// only one table updated, obtain table name from command suffix
 			$query= new SqlQuery() ;
 			$query->add_from($this->settings->Prefix().$this->suffix) ;
 			$query->add_select('*') ;
@@ -1089,13 +1093,17 @@ class CommandEditContent extends ContentSQLCommand
 		}
 		else 
 		{
-			// all tables updated
+			// all tables updated, find master table object and build query
 			
 			// Get sql query from content structure  
 			$query_builder=new QueryBuilder($this->settings) ;
 			$parser=new ContentParser($query_builder) ;
 			
-			$master=$this->content->GetElementByName($this->content->DisplayChild()) ;
+			print_r($this->post_obj) ;
+			
+			$view_object=$this->content->GetElementByName($this->post_obj->view) ;
+			$master=$view_object->MasterTableObject() ;
+			
 			$parser->Parse($master) ;
 			$query=$query_builder->GetSqlQuery() ;
 
@@ -1126,6 +1134,7 @@ class CommandDeleteContent extends ContentSQLCommand
 
 
 // Generates web page with content structure as a model
+// uses GoF "Template Method" pattern
 class PageView
 {
 	use SqlConnectable ;

@@ -16,9 +16,12 @@ abstract class Command
 // Command from POST request 
 class POSTCommand extends Command
 {
-	protected $value,   // value from POST request 
-	          $suffix ; // suffix after command name in request
+	protected $value,		// value from POST request 
+	          $suffix,		// suffix after command name in request
+			  $post_obj ;	// 
 
+	function __construct() { $this->post_obj=(object)$_POST ; }
+	
 	function SetValue($value) { $this->value=$value ; }
 	function SetSuffix($suffix) { $this->suffix=$suffix ; }
 }

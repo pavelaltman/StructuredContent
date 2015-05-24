@@ -1,11 +1,13 @@
 <?php
 require_once 'content.php';
 
+// visitor to display view, defined by ViewContent element of Content structure
 class GetViewVisitor extends ContentVisitor
 {
 	use SqlConnectable ;
 	
-	protected $form_interface ;
+	protected $form_interface,
+			  $dispatcher ;
 	
 	function __construct($settings,$sqlconnect,$interface,$dispatcher)
 	{
@@ -16,8 +18,8 @@ class GetViewVisitor extends ContentVisitor
 
 	function VisitMasterTableViewContent($viewcontent)
 	{
-		$master=$viewcontent->DisplayChildObject()->DisplayChildObject() ;
-		
+		$master=$viewcontent->MasterTableObject() ;
+
 		// create form builder
 		$form_builder=new FormBuilder($this->settings,$this->sqlconnect,$this->form_interface,
 				$this->dispatcher->GetCommand("CommandEditContent")->Obj()) ;
@@ -63,6 +65,8 @@ class GetViewVisitor extends ContentVisitor
 
 class ContentPageView extends PageView
 {
+	private $view_visitor ;
+	
 	function GetCommandsArray()
 	{
 		return array("CommandEditContent" => new CommandEditContent($this->settings, $this->sqlconnect, $this->content),
@@ -75,11 +79,16 @@ class ContentPageView extends PageView
 	{
 		if (array_key_exists('view',$_GET))
 			$view_name=$_GET['view'] ; 
+		else if (array_key_exists('view',$_POST))
+			$view_name=$_POST['view'] ; 
 		else
 			$view_name=$this->content->DisplayChild() ;
+
+		
+		$view_visitor=new GetViewVisitor($this->settings, $this->sqlconnect,
+		                            	 $this->form_interface, $this->dispatcher) ;
 		
 		$view_object=$this->content->GetElementByName($view_name) ;
-		$view_visitor=new GetViewVisitor($this->settings, $this->sqlconnect, $this->form_interface, $this->dispatcher) ;		
 		return $view_object->Accept($view_visitor) ;
 	}
 }

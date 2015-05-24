@@ -319,24 +319,20 @@ class CommandInsertElement extends ChangeContentStructureCommand
 {
  	function Execute()
  	{
-		$post_obj=(object)$_POST ;
-		
-		// print_r($post_obj) ;
-
 		//add new child in proper place
- 		$element=$this->content->GetElementByName($post_obj->Parent) ;
+ 		$element=$this->content->GetElementByName($this->post_obj->Parent) ;
  		if ($element)
  		{
- 	 		$classname=$post_obj->ClassName ;
- 	 		$new_object=new $classname($post_obj->Name,array()) ;
+ 	 		$classname=$this->post_obj->ClassName ;
+ 	 		$new_object=new $classname($this->post_obj->Name,array()) ;
  	 
  	 		// using visitor object to restore specific fields from POST object
  	 		$restore_visitor=new RestoreElementVisitor ;
- 	 		$restore_visitor->SetObject($post_obj) ;
+ 	 		$restore_visitor->SetObject($this->post_obj) ;
  	 		$new_object->Accept($restore_visitor) ;
  	 
  	 		
- 	 		$element->AddChild($new_object,$post_obj->AfterChild) ;
+ 	 		$element->AddChild($new_object,$this->post_obj->AfterChild) ;
 
 			$this->Add($new_object,1) ;
 			$this->Save() ;
@@ -352,25 +348,23 @@ class CommandNewParent extends ChangeContentStructureCommand
 		$element=$this->content->GetElementByName($this->suffix) ;
 		if ($element)
 		{
-		    $post_obj=(object)$_POST ;
-			
-			$new_parent=$this->content->GetElementByName($post_obj->NewParent) ;
+			$new_parent=$this->content->GetElementByName($this->post_obj->NewParent) ;
 			$old_parent=$element->Par() ;
 			
-			$new_parent->AddChild($element,$post_obj->AfterChild) ;
+			$new_parent->AddChild($element,$this->post_obj->AfterChild) ;
 			$this->Add($element,0) ; // need not create table
 				
-			if (strlen($post_obj->Reference) && $element->IsTableContent())
+			if (strlen($this->post_obj->Reference) && $element->IsTableContent())
 			{
 				// create reference in place of moved table
 				// Id's in field remain, only rename field
 				
-				$new_object=new TableReference($post_obj->Reference,array()) ;
+				$new_object=new TableReference($this->post_obj->Reference,array()) ;
 				$new_object->SetDisplayChild($element->GetName()) ;
 				$old_parent->ReplaceChild_keepname($element->GetName(),$new_object) ;
 				
 				$query='alter table '.$this->settings->Prefix().$old_parent->GetName().
-				       ' change '.$element->GetName().' '.$post_obj->Reference ;
+				       ' change '.$element->GetName().' '.$this->post_obj->Reference ;
 				
 				echo $query ;
 				// $this->sqlconnect->SimpleQuery($query) ;
