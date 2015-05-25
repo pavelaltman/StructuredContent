@@ -43,7 +43,7 @@ class Settings
 // Content classes, based on GoF "Composite" design pattern   
 abstract class Content
 {
-	abstract function Accept($visitor) ;
+	abstract function Accept($visitor,$t_par) ;
 
 	//abstract function AddChild(Content $Child) ; 
 	//abstract function DelChild($name) ;
@@ -148,7 +148,7 @@ class StringContent extends SimpleContent
 	function GetSize() { return $this->size ; } 
 	function SetSize($size) { $this->size=$size ; } 
 
-	function Accept($visitor) 
+	function Accept($visitor,$t_par=null) 
 	{ 
 		return $visitor->VisitString($this) ;
 	}
@@ -198,12 +198,6 @@ abstract class CompositeContent extends Content
 	}
 	function GetChild($name) { return $this->children[$name] ; }	
 	
-	
-	function Accept($visitor) 
-	{ 
-		return "" ;
-	}
-
 	function DisplayChild() { return $this->display_child ; }
 	function DisplayChildObject() { return $this->children[$this->DisplayChild()] ; }
 	
@@ -216,21 +210,21 @@ abstract class CompositeContent extends Content
 // root of content structure for specific domain
 class Domain extends CompositeContent
 {
-	function Accept($visitor)
+	function Accept($visitor,$t_par=null)
 	{
 		return $visitor->VisitDomain($this) ;
 	}
 }
 
 
-class TableContent extends CompositeContent
+abstract class TableContent extends CompositeContent
 {
 	function IsTableContent() { return true ; }
 }
 
 class MasterTable extends TableContent
 {
-	function Accept($visitor)
+	function Accept($visitor,$t_par=null)
 	{
 		return $visitor->VisitMasterTable($this) ;
 	}
@@ -242,7 +236,7 @@ class MultiDetailTable extends TableContent
 	function DependsFromParent() { return true ; }
 	function CanCascadeDelete() { return true ; }
 	
-	function Accept($visitor)
+	function Accept($visitor,$t_par)
 	{
 		return $visitor->VisitMultiDetailTable($this) ;
 	}
@@ -260,9 +254,9 @@ class AttributeTable extends TableContent
 	function SetFiltersOutput($filters_output) { $this->filters_output=$filters_output ; }
 	function SetCurrentValue($current_value) { $this->current_value=$current_value ; }
 	
-	function Accept($visitor)
+	function Accept($visitor,$t_par=null)
 	{
-		return $visitor->VisitAttributeTable($this) ;
+		return $visitor->VisitAttributeTable($this,$t_par) ;
 	}
 }
 
@@ -278,7 +272,7 @@ class TableReference extends CompositeContent
 	// overloads regular LowerName(), returns childs's
 	function LowerName() { return $this->DisplayChildObject()->GetName() ; }
 	
-	function Accept($visitor)
+	function Accept($visitor,$t_par)
 	{
 		return $visitor->VisitTableReference($this) ;
 	}
@@ -286,7 +280,7 @@ class TableReference extends CompositeContent
 
 
 // defines view to show content
-class ViewContent extends CompositeContent
+abstract class ViewContent extends CompositeContent
 {
 	
 }
@@ -295,7 +289,7 @@ class MasterTableViewContent extends ViewContent
 {
 	function MasterTableObject() { return $this->DisplayChildObject()->DisplayChildObject() ; }
 	
-	function Accept($visitor)
+	function Accept($visitor,$t_par=null)
 	{
 		return $visitor->VisitMasterTableViewContent($this) ;
 	}
@@ -308,7 +302,7 @@ abstract class ContentVisitor
 	function VisitString($content) { return "" ; } 
 	function VisitMasterTable($content) { return "" ; } 
 	function VisitMultiDetailTable($content) { return "" ; }
-	function VisitAttributeTable($content) { return "" ; }
+	function VisitAttributeTable($content,$t_par) { return "" ; }
 	function VisitDomain($content) { return "" ; }
 	function VisitTableReference($content) { return "" ; }
 	function VisitMasterTableViewContent($content) { return "" ; }
@@ -323,12 +317,12 @@ abstract class ContentVisitorBeforeAfter extends ContentVisitor
 	function VisitStringBefore($content) { return "" ; }
 	function VisitMasterTableBefore($content) { return "" ; }
 	function VisitMultiDetailTableBefore($content) { return "" ; }
-	function VisitAttributeTableBefore($content) { return "" ; }
+	function VisitAttributeTableBefore($content,$t_par) { return "" ; }
 	
 	function VisitStringAfter($content) { return "" ; }
 	function VisitMasterTableAfter($content) { return "" ; }
 	function VisitMultiDetailTableAfter($content) { return "" ; }
-	function VisitAttributeTableAfter($content) { return "" ; }
+	function VisitAttributeTableAfter($content,$t_par) { return "" ; }
 	
 	final function VisitString($content) 
 	{ return !$this->after ? $this->VisitStringBefore($content) : $this->VisitStringAfter($content) ; }
@@ -339,8 +333,8 @@ abstract class ContentVisitorBeforeAfter extends ContentVisitor
 	final function VisitMultiDetailTable($content)
 	{ return !$this->after ? $this->VisitMultiDetailTableBefore($content) : $this->VisitMultiDetailTableAfter($content) ; }
 
-	final function VisitAttributeTable($content)
-	{ return !$this->after ? $this->VisitAttributeTableBefore($content) : $this->VisitAttributeTableAfter($content) ; }
+	final function VisitAttributeTable($content,$t_par)
+	{ return !$this->after ? $this->VisitAttributeTableBefore($content,$t_par) : $this->VisitAttributeTableAfter($content,$t_par) ; }
 }
 
 
@@ -361,7 +355,7 @@ class POSTElementVisitor extends ContentVisitor
 {
 	use SqlConnectable ;
 	
-	function VisitAttributeTable($content)
+	function VisitAttributeTable($content,$t_par=null)
 	{
 		// setting current value from post request
 		$content->SetCurrentValue($_POST[$content->GetName()]) ;
@@ -429,7 +423,7 @@ class FormElementVisitor extends HtmlElementVisitor
 	}
 	
 
-	function VisitAttributeTableBefore($content) 
+	function VisitAttributeTableBefore($content,$t_par=null) 
 	{
 		$ret=$this->form_interface->Fieldset() ;
 
@@ -465,7 +459,7 @@ class FormElementVisitor extends HtmlElementVisitor
 		return $ret ;   
 	}
 		
-	function VisitAttributeTableAfter($content)
+	function VisitAttributeTableAfter($content,$t_par=null)
 	{ 
 		return $this->form_interface->Fieldset_end() ;
 	}
@@ -568,11 +562,11 @@ class QueryElementVisitor extends ContentVisitor
 		$this->AddIdToQuery($mdt) ;
 	}
 	
-	function VisitAttributeTable($at)	
+	function VisitAttributeTable($at,$t_par=null)	
 	{ 
 		$tabname=$this->settings->Prefix().$at->GetName() ;
 		$this->query->add_join($tabname,
-				               $tabname.'.Id='.$this->settings->Prefix().$at->Par()->UpperTableName().'.'.$at->GetName()) ;
+				               $tabname.'.Id='.$this->settings->Prefix().$t_par->UpperTableName().'.'.$at->GetName()) ;
 		
 		$this->AddIdToQuery($at) ;
 		
@@ -581,7 +575,7 @@ class QueryElementVisitor extends ContentVisitor
 		{
 			$value=$at->CurrentValue() ;
 			if ($value)
-				$this->query->add_where($this->settings->Prefix().$at->Par()->UpperTableName().'.'.$at->GetName().'='.$value) ;
+				$this->query->add_where($this->settings->Prefix().$t_par->UpperTableName().'.'.$at->GetName().'='.$value) ;
 		}
 	}
 }
@@ -604,7 +598,7 @@ class SaveElementVisitor extends ContentVisitor
 		$this->query->add_values("DisplayChild",$content->DisplayChild()) ;
 	}
 	
-	function VisitAttributeTable($content) 
+	function VisitAttributeTable($content,$t_par=null) 
 	{ 
 		$this->VisitCompositeContent($content) ; 
 		$this->query->add_values("FilteredByChild",$content->FilteredByChild()) ; 
@@ -645,7 +639,7 @@ class RestoreElementVisitor extends ContentVisitor
 		$this->VisitCompositeContent($content) ; 
 	}
 	
-	function VisitAttributeTable($content)
+	function VisitAttributeTable($content,$t_par=null)
 	{
 		$this->VisitCompositeContent($content) ;
 		$content->SetFilteredByChild($this->object->FilteredByChild) ;
@@ -662,8 +656,8 @@ abstract class Builder
 {
 	function BuildStart() {}
 	function BuildEnd() {}
-	function BuildElementStart($element) {}
-	function BuildElementEnd($element) {}
+	function BuildElementStart($element,$t_par) {}
+	function BuildElementEnd($element,$t_par) {}
 }
 
 // array of builders to build several objects at one parse
@@ -680,8 +674,8 @@ class Builders extends Builder
 
 	function BuildStart() { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildStart() ; }
 	function BuildEnd() { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildEnd() ; }
-	function BuildElementStart($el) { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildElementStart($el) ; }
-	function BuildElementEnd($el) { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildElementEnd($el) ; }
+	function BuildElementStart($el,$t_par=null) { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildElementStart($el,$t_par) ; }
+	function BuildElementEnd($el,$t_par=-null) { for ($this->it->First() ; !$this->it->IsDone() ; $this->it->Next()) $this->it->Current()->BuildElementEnd($el,$t_par) ; }
 }
 
 
@@ -702,8 +696,8 @@ abstract class HtmlBuilder extends Builder
 	function Get() { return $this->result ; }
 
 	// implementing builder interface
-	function BuildElementStart($element) {	$this->result.=$element->Accept($this->before_visitor) ; }
-	function BuildElementEnd($element) { $this->result.=$element->Accept($this->after_visitor) ; }
+	function BuildElementStart($element,$t_par=null) {	$this->result.=$element->Accept($this->before_visitor,$t_par) ; }
+	function BuildElementEnd($element,$t_par=null) { $this->result.=$element->Accept($this->after_visitor,$t_par) ; }
 }
 
 // Builds html form to add new and query content 
@@ -782,7 +776,7 @@ class POSTBuilder extends Builder
 	}
 
 	// implementing builder interface
-	function BuildElementStart($element) {	$element->Accept($this->post_visitor) ; }
+	function BuildElementStart($element,$t_par=null) {	$element->Accept($this->post_visitor,$t_par) ; }
 }
 
 
@@ -802,7 +796,7 @@ class QueryBuilder extends Builder
 	function GetSqlQuery() { return $this->query ; }
 	
 	// implementing builder interface
-	function BuildElementStart($element) {	$element->Accept($this->query_visitor) ; }
+	function BuildElementStart($element,$t_par=null) {	$element->Accept($this->query_visitor,$t_par) ; }
 }
 
 
@@ -830,7 +824,7 @@ class SaveBuilder extends Builder
 		$this->sqlconnect->SimpleQuery($this->query->get_delete_query()) ;
 	}
 	
-	function BuildElementStart($element) 
+	function BuildElementStart($element,$t_par=null) 
 	{
 		$this->query->Reset() ;
 		$this->query->add_insert($this->settings->ContentTable()) ; 
@@ -842,7 +836,7 @@ class SaveBuilder extends Builder
 	  		$this->query->add_values("ParentName",$par->GetName()) ;
 		
 		
-		$element->Accept($this->save_visitor) ; // adding class-specific fields to query 
+		$element->Accept($this->save_visitor,$t_par) ; // adding class-specific fields to query 
 		
 		$this->query->add_values("Ord",++$this->order) ; // adding order
 		
@@ -865,7 +859,7 @@ class InsertBuilder extends Builder
 	use SqlConnectable ;
 	
 	// inserts data to one user table, asumes dependent tables were processed before
-	function BuildElementStart($element)
+	function BuildElementStart($element,$t_par)
 	{
 		
 		if (strlen($_POST[$element->DisplayChild()]) && $element->IsTableContent())
@@ -883,7 +877,7 @@ class InsertBuilder extends Builder
 			}
 			// adding parent table if this depends from parent
 			if ($element->DependsFromParent())
-				$query->add_values($element->Par()->GetName(), $this->sqlconnect->Esc($_POST[$element->Par()->GetName()])) ;
+				$query->add_values($t_par->GetName(), $this->sqlconnect->Esc($_POST[$t_par->GetName()])) ;
 				
 			// insert or upate data and then add Id to $_POST
 			if ($_POST[$element->GetName()])
@@ -920,18 +914,18 @@ class ContentParser
 	function __construct($builders, $stop=0) { $this->builders=$builders ; $this->stop_reference=$stop ; }
 	
 	// "normal" parse
-	function ParseElement($content_element)
+	function ParseElement($content_element,$t_par=null)
 	{
-		$this->builders->BuildElementStart($content_element) ;
+		$this->builders->BuildElementStart($content_element,$t_par) ;
 		
 		if (!$this->stop_reference || !$content_element->IsReference())
 		{
 			$iterator=$content_element->GetChildrenIterator() ;
 			for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
-				$this->ParseElement($iterator->Current()) ;
+				$this->ParseElement($iterator->Current(),$content_element) ;
 		}
 		
-		$this->builders->BuildElementEnd($content_element) ;
+		$this->builders->BuildElementEnd($content_element,$t_par) ;
 	}
 
 	// main function of normal parse	
@@ -944,7 +938,7 @@ class ContentParser
 
 	
 	// parse by dependency relation
-	function ParseCompositesByDependency($content_element)
+	function ParseCompositesByDependency($content_element,$t_par)
 	{
 		$iterator=$content_element->GetChildrenIterator() ;
 		
@@ -953,18 +947,18 @@ class ContentParser
 		{
 			$el=$iterator->Current() ;
 			if (!$el->DependsFromParent() && !$el->IsLeaf())
-				$this->ParseCompositesByDependency($el) ;
+				$this->ParseCompositesByDependency($el,$content_element) ;
 		}
 		
 		// handle this element
-		$this->builders->BuildElementStart($content_element) ;
+		$this->builders->BuildElementStart($content_element,$t_par) ;
 		
 		// now parse elements depending from this
 		for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
 		{
 			$el=$iterator->Current() ;
 			if ($el->DependsFromParent() && !$el->IsLeaf())
-				$this->ParseCompositesByDependency($el) ;
+				$this->ParseCompositesByDependency($el,$content_element) ;
 		}
 	}
 }
