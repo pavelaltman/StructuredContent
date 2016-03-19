@@ -277,7 +277,7 @@ class StructureAddVisitor extends ContentVisitor
 
 class ChangeContentStructureCommand extends ContentSQLCommand
 {
-	// perform content-specific operations after adding $new_object as child child using StructureAddVisitor
+	// perform content-specific operations after adding $new_object as child using StructureAddVisitor
 	// if $table_create then not only add field to parent table, but create new table for TableContent  
 	function Add($new_object,$table_create=0)
 	{
@@ -359,14 +359,15 @@ class CommandNewParent extends ChangeContentStructureCommand
 		$element=$this->content->GetElementByName($this->suffix) ;
 		if ($element)
 		{
-			$new_parent=$this->content->GetElementByName($this->post_obj->NewParent) ;
-			$old_parent=$element->Par() ;
-			
-			$new_parent->AddChild($element,$this->post_obj->AfterChild) ;
-			$this->Add($element,0) ; // need not create table
-				
+			// the only case for change parent is moving dependent table to Domain, leaving reference 
 			if (strlen($this->post_obj->Reference) && $element->IsTableContent())
 			{
+				$new_parent=$this->content->GetElementByName($this->post_obj->NewParent) ;
+				$old_parent=$element->Par() ;
+			
+				$new_parent->AddChild($element,$this->post_obj->AfterChild) ;
+				$this->Add($element,0) ; // need not create table
+				
 				// create reference in place of moved table
 				// Id's in field remain, only rename field
 				
@@ -374,22 +375,14 @@ class CommandNewParent extends ChangeContentStructureCommand
 				$new_object->SetDisplayChild($element->GetName()) ;
 				$old_parent->ReplaceChild_keepname($element->GetName(),$new_object) ;
 				
-				$query='alter table '.$this->settings->Prefix().$old_parent->GetName().
-				       ' change '.$element->GetName().' '.$this->post_obj->Reference ;
+				// $query='alter table '.$this->settings->Prefix().$old_parent->GetName().
+				//       ' change '.$element->GetName().' '.$this->post_obj->Reference ;
 				
-				echo $query ;
+				// echo $query ;
 				// $this->sqlconnect->SimpleQuery($query) ;
-			}
-			else 
-			{
-				// simply del from old parent, table not drop but empty
 				
-				$old_parent->DelChild($element->GetName()) ;
-				$this->Del($element,0) ;			
+				$this->Save() ;
 			}
-			
-			
-			$this->Save() ;
 		}
 	}
 }
