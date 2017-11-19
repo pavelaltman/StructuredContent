@@ -79,6 +79,7 @@ class ContentPageView extends PageView
 
 	function GetPage()
 	{
+		// search for view name in GET or POST, else use "DisplayChild" from root entry 
 		if (array_key_exists('view',$_GET))
 			$view_name=$_GET['view'] ; 
 		else if (array_key_exists('view',$_POST))

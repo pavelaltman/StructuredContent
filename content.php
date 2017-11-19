@@ -282,8 +282,9 @@ class TableReference extends CompositeContent
 // defines view to show content
 abstract class ViewContent extends CompositeContent
 {
-	
 }
+
+
 
 class MasterTableViewContent extends ViewContent
 {
@@ -1200,7 +1201,7 @@ class PageView
 		if ($post)
 			$this->dispatcher->ExecuteFromPOST() ;		
 		
-		$view='<p><a href="index.php">Content</a>  <a href="structure.php">Structure</a></p>' ;
+		$view='<!DOCTYPE html> <p> <a href="index.php">Content</a> <a href="structure.php">Structure</a></p>'."\n" ;
 
 		return $view.$this->GetPage() ;
 	}

@@ -30,18 +30,18 @@ abstract class FormImp
 
 class HtmlFormImp extends FormImp
 {
-	function Header($url,$id) { return '<form action="'.$url.'" id="'.$id.'" method="post">' ; }
+	function Header($url,$id) { return '<form action="'.$url.'" id="'.$id.'" method="post">'."\n" ; }
 	function End($submit_name) 
 	{ 
-		return (strlen($submit_name) ? '<p><input type="submit" name="'.$submit_name.'"/></p>' : '').'</form>' ; 
+		return (strlen($submit_name) ? '<p><input type="submit" name="'.$submit_name.'"/></p>' : '').'</form>'."\n" ; 
 	} 
 	function TextInput($name,$size,$value="") 
 	{ 
-		return '<input type="text" name="'.$name.'" size="'.$size.'" value="'.$value.'">' ; 
+		return '<input type="text" name="'.$name.'" size="'.$size.'" value="'.$value.'">'."\n" ; 
 	}
 	function HiddenInput($name,$value)
 	{
-		return '<input type="hidden" name="'.$name.'" value="'.$value.'">' ;
+		return '<input type="hidden" name="'.$name.'" value="'.$value.'">'."\n" ;
 	}
 	
 	function ListInput($name,$opt_iter,$value_label,$name_label,$selected_value,$default_name) 
@@ -54,7 +54,7 @@ class HtmlFormImp extends FormImp
 			$ret.='<option '.($row->$value_label==$selected_value ? 'selected' : '').' value="'.$row->$value_label.'">'.$row->$name_label.'</option>' ;
 		}
 		
-		$ret.='</select>' ;
+		$ret.='</select>'."\n" ;
 		return $ret ; 
 	}
 
@@ -64,9 +64,9 @@ class HtmlFormImp extends FormImp
 	function Paragraf_end() { return '</p>' ; } 
 
 	function Table() { return "<table border=\"1\">" ; }
-	function Table_end() { return "</table>" ; }
+	function Table_end() { return "</table>"."\n" ; }
 	function TableRow() { return "<tr>" ; }
-	function TableRow_end() { return "</tr>" ; }
+	function TableRow_end() { return "</tr>"."\n" ; }
 	function TableCol() { return "<td>" ; }
 	function TableCol_end() { return "</td>" ; }
 	function TableHeadCol() { return "<th>" ; }
