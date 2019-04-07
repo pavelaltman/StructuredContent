@@ -413,10 +413,13 @@ class StructurePageView extends PageView
 	
 	function GetPage()
 	{
-		$parser=new ContentParser($this->struct_view_builder,1) ;
-		
+	    // view string
+	    $view='<!DOCTYPE html> <p> <a href="index.php">Content</a> <a href="structure.php"><b>Structure</b></a></p>'."\n<p>" ;
+	    
+	    
+	    $parser=new ContentParser($this->struct_view_builder,1) ;
 		$parser->Parse($this->content) ;
-		return $this->struct_view_builder->Get() ;
+		return $view.$this->struct_view_builder->Get() ;
 	}
 }
 

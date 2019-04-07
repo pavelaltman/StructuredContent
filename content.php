@@ -297,7 +297,17 @@ class MasterTableViewContent extends ViewContent
 } 
 
 
-// GoF "Visitor" classes to get specific information from content structure, or do specific thingth with it
+class UserDomains extends CompositeContent
+{
+	function Accept($visitor,$t_par=null)
+	{
+		return $visitor->VisitUserDomains($this) ;
+	}
+	
+}
+
+
+// GoF "Visitor" classes to get specific information from content structure, or do specific things with it
 abstract class ContentVisitor
 {
 	function VisitString($content) { return "" ; } 
@@ -307,6 +317,7 @@ abstract class ContentVisitor
 	function VisitDomain($content) { return "" ; }
 	function VisitTableReference($content) { return "" ; }
 	function VisitMasterTableViewContent($content) { return "" ; }
+	function VisitUserDomains($content) { return "" ; }
 } 
 
 abstract class ContentVisitorBeforeAfter extends ContentVisitor
@@ -611,6 +622,7 @@ class SaveElementVisitor extends ContentVisitor
 	function VisitDomain($content) { $this->VisitCompositeContent($content) ; }
 	function VisitTableReference($content) { $this->VisitCompositeContent($content) ; }
 	function VisitMasterTableViewContent($content) { $this->VisitCompositeContent($content) ; }
+	function VisitUserDomains($content) { $this->VisitCompositeContent($content) ; }
 }
 	
 
@@ -634,12 +646,9 @@ class RestoreElementVisitor extends ContentVisitor
 	function VisitMultiDetailTable($content) { $this->VisitCompositeContent($content) ; }
 	function VisitDomain($content) { $this->VisitCompositeContent($content) ; }
 	function VisitMasterTableViewContent($content) { $this->VisitCompositeContent($content) ; }
-	
-	function VisitTableReference($content) 
-	{ 
-		$this->VisitCompositeContent($content) ; 
-	}
-	
+	function VisitTableReference($content) { $this->VisitCompositeContent($content) ; }
+	function VisitUserDomains($content) { $this->VisitCompositeContent($content) ; }
+
 	function VisitAttributeTable($content,$t_par=null)
 	{
 		$this->VisitCompositeContent($content) ;
@@ -1166,11 +1175,11 @@ class PageView
 		// create settings
 	 	$this->settings=new Settings("sc_", "_content","_state","mainform",
 		                              array("StringContent","AttributeTable","MasterTable","MultiDetailTable",
-		                              		"TableReference","MasterTableViewContent"
+		                              		"TableReference","MasterTableViewContent","Domain"
 		                              )) ;
 
 		// create MySqli connection
-		$this->sqlconnect=new MySqliConnector('dollsfun.mysql.ukraine.com.ua','dollsfun_content','93hfkudn', 'dollsfun_content') ;
+		$this->sqlconnect=new MySqliConnector('dollsfun.mysql.tools','dollsfun_content','93hfkudn', 'dollsfun_content') ;
 
 		// create form interface and imlementation
 		$this->imp=new HtmlFormImp() ;
@@ -1201,9 +1210,7 @@ class PageView
 		if ($post)
 			$this->dispatcher->ExecuteFromPOST() ;		
 		
-		$view='<!DOCTYPE html> <p> <a href="index.php">Content</a> <a href="structure.php">Structure</a></p>'."\n" ;
-
-		return $view.$this->GetPage() ;
+		return $this->GetPage() ;
 	}
 }
 

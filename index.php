@@ -77,22 +77,78 @@ class ContentPageView extends PageView
 		
 	}
 
+	function FindInGetPost($strname)
+	{
+	    if (array_key_exists($strname,$_GET))
+	       return $_GET[$strname] ;
+	    else if (array_key_exists($strname,$_POST))
+	       return $_POST[$strname] ;
+	    else return "" ;
+	                
+	}
+	
+	
 	function GetPage()
 	{
-		// search for view name in GET or POST, else use "DisplayChild" from root entry 
-		if (array_key_exists('view',$_GET))
-			$view_name=$_GET['view'] ; 
-		else if (array_key_exists('view',$_POST))
-			$view_name=$_POST['view'] ; 
-		else
-			$view_name=$this->content->DisplayChild() ;
-
+	    $domain_name=$this->FindInGetPost('domain');
+	    if (strlen($domain_name))
+	        $domain_object=$this->content->GetElementByName($domain_name) ;
+	    else 
+	    {
+	        $domain_object=$this->content->DisplayChildObject() ;
+	        $domain_name=$domain_object->GetName() ;
+	    }
+	    
+	    $view_name=$this->FindInGetPost('view');
+	    if (strlen($view_name))
+	    {
+	        $view_object=$this->content->GetElementByName($view_name) ;
+	    }
+	    else
+	    {
+	        $view_name=$domain_object->DisplayChild() ;
+	        $view_object=$this->content->GetElementByName($view_name) ;
+	    }
+	     
 		
-		$view_object=$this->content->GetElementByName($view_name) ;
+		
 
+		// view string
+		$view='<!DOCTYPE html> <p> <a href="index.php"><b>Content</b></a> <a href="structure.php">Structure</a></p>'."\n<p>" ;
+		
+		// Adding domains to header, current domain is bold
+		$iterator=$this->content->GetChildrenIterator() ;
+		for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
+		{
+		    $dname=$iterator->Current()->GetName() ;
+		    if ($dname==$domain_name)
+		        $view=$view.'<a href="index.php? domain='.$dname.'"><b>'.$dname.'</b></a>'."  ";
+		    else
+		        $view=$view.'<a href="index.php? domain='.$dname.'">'.$dname.'</a>'."  ";
+		}
+		$view=$view."</p>\n<p>";
+		
+		// Adding views to header, current view is bold
+		$iterator=$domain_object->GetChildrenIterator() ;
+		for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
+		{
+		    if (get_class($iterator->Current())=="MasterTableViewContent")
+		    {
+		      $vname=$iterator->Current()->GetName() ;
+		    
+		      if ($vname==$view_object->GetName())
+		        $view=$view.'<a href="index.php? domain='.$domain_name.'& view='.$vname.'"><b>'.$vname.'</b></a>'."  ";
+		      else
+		        $view=$view.'<a href="index.php? domain='.$domain_name.'& view='.$vname.'">'.$vname.'</a>'."  ";
+		
+		    }
+		}
+		$view=$view."</p>\n";
+		
 		
 		$view_visitor=new GetViewVisitor($this->settings, $this->sqlconnect,$this->form_interface, $this->dispatcher) ;
-		return $view_object->Accept($view_visitor) ;
+		
+		return $view.$view_object->Accept($view_visitor) ;
 	}
 }
 
