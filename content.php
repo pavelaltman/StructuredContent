@@ -320,6 +320,7 @@ abstract class ContentVisitor
 	function VisitUserDomains($content) { return "" ; }
 } 
 
+
 abstract class ContentVisitorBeforeAfter extends ContentVisitor
 {
 	protected $after ;
@@ -372,7 +373,7 @@ class POSTElementVisitor extends ContentVisitor
 		// setting current value from post request
 		$content->SetCurrentValue($_POST[$content->GetName()]) ;
 		
-		// saving current value to state tabe
+		// saving current value to state table
 		$query=new SqlQuery() ;
 		$query->add_insert($this->settings->StateTable()) ;
 		$query->add_values("Name",$content->GetName()) ;
@@ -1133,6 +1134,8 @@ class CommandEditContent extends ContentPageViewCommand
 			
 			$parser->Parse($this->master) ;
 			$query=$query_builder->GetSqlQuery() ;
+			
+			// print_r($query);
 
 			// add Id of edited row and get result
 			$query->add_where($this->settings->Prefix().$this->master->GetName().".Id=".$this->value) ;

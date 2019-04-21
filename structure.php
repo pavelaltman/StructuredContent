@@ -72,7 +72,7 @@ class StructureViewBuilder extends Builder
 		// Name
 		$this->result.=$this->output_interface->TableCol() ;
 		$this->TreeIndent() ;
-		$this->result.=$this->output_interface->TextInput("Name",10) ;
+		$this->result.=$this->output_interface->TextInput("Name",20) ;
 		$this->result.=$this->output_interface->TableCol_end() ;
 		
 		// Type
@@ -112,32 +112,76 @@ class StructureViewBuilder extends Builder
 
 		$this->TreeIndent() ;
 		
-		$this->result.=$element->GetName() ;
-		$this->result.=$this->output_interface->TableCol_end() ;
-		
-		$this->result.=$this->output_interface->TableCol() ;
-		$this->result.=get_class($element) ;
-		$this->result.=$this->output_interface->TableCol_end() ;
-		
-		$this->result.=$this->output_interface->TableCol() ;
-		$this->result.=$element->GetSize() ;
-		$this->result.=$this->output_interface->TableCol_end() ;
-		
-		$this->result.=$this->output_interface->TableCol() ;
-		$this->result.=$element->DisplayChild() ;
-		$this->result.=$this->output_interface->TableCol_end() ;
-		
-		$this->result.=$this->output_interface->TableCol() ;
-		$this->result.=$element->FilteredByChild() ;
-		$this->result.=$this->output_interface->TableCol_end() ;
-		
-		$this->result.=$this->output_interface->TableCol() ;
-		$this->result.=$element->FiltersOutput() ;
-		$this->result.=$this->output_interface->TableCol_end() ;
-		
-		
-		if (!$this->ref_flag) // draw buttons only if not inside reference
+		if ($this->edit_name==$element->GetName())
 		{
+		    // "inline" form to edit current element
+		    
+		    $this->result.=$this->output_interface->TextInput("Name",20,$element->GetName()) ;
+		    $this->result.=$this->output_interface->TableCol_end() ;
+		    
+		    // Type
+		    $this->result.=$this->output_interface->TableCol() ;
+		    $this->result.=$this->output_interface->ListInput("ClassName",$this->settings->GetTypesIterator(),
+		        "ClassName","ClassName",get_class($element),"ClassName") ;
+		    $this->result.=$this->output_interface->TableCol_end() ;
+		    
+		    // Size
+		    $this->result.=$this->output_interface->TableCol() ;
+		    $this->result.=$this->output_interface->TextInput("Size",3,$element->GetSize()) ;
+		    $this->result.=$this->output_interface->TableCol_end() ;
+		    
+		    // DisplayChild
+		    $this->result.=$this->output_interface->TableCol() ;
+		    $this->result.=$this->output_interface->TextInput("DisplayChild",20,$element->DisplayChild()) ;
+		    $this->result.=$this->output_interface->TableCol_end() ;
+
+		    // FilteredByChild
+		    $this->result.=$this->output_interface->TableCol() ;
+		    $this->result.=$this->output_interface->TextInput("FilteredByChild",20,$element->FilteredByChild()) ;
+		    $this->result.=$this->output_interface->TableCol_end() ;
+		    
+		    // FiltersOutput
+		    $this->result.=$this->output_interface->TableCol() ;
+		    $this->result.=$this->output_interface->TextInput("FiltersOutput",3,$element->FiltersOutput()) ;
+		    $this->result.=$this->output_interface->TableCol_end() ;
+		    
+		    // button to update
+		    $this->result.=$this->output_interface->TableCol() ;
+		    $this->result.=$this->output_interface->Button($this->settings->MainFormId(),"Update",
+		        "CommandUpdateElement","") ;
+		    $this->result.=$this->output_interface->TableCol_end() ;
+   
+		    
+		}
+		else 
+		{
+		 $this->result.=$element->GetName() ;
+		
+		 $this->result.=$this->output_interface->TableCol_end() ;
+		
+		 $this->result.=$this->output_interface->TableCol() ;
+		 $this->result.=get_class($element) ;
+		 $this->result.=$this->output_interface->TableCol_end() ;
+		
+		 $this->result.=$this->output_interface->TableCol() ;
+		 $this->result.=$element->GetSize() ;
+		 $this->result.=$this->output_interface->TableCol_end() ;
+		
+		 $this->result.=$this->output_interface->TableCol() ;
+		 $this->result.=$element->DisplayChild() ;
+		 $this->result.=$this->output_interface->TableCol_end() ;
+		
+		 $this->result.=$this->output_interface->TableCol() ;
+		 $this->result.=$element->FilteredByChild() ;
+		 $this->result.=$this->output_interface->TableCol_end() ;
+		
+		 $this->result.=$this->output_interface->TableCol() ;
+		 $this->result.=$element->FiltersOutput() ;
+		 $this->result.=$this->output_interface->TableCol_end() ;
+		
+		
+		 if (!$this->ref_flag) // draw buttons only if not inside reference
+		 {
 			// "add child" button
 			$this->result.=$this->output_interface->TableCol() ;
 			if (!$element->IsLeaf()) 
@@ -185,6 +229,7 @@ class StructureViewBuilder extends Builder
 				$this->result.=$this->output_interface->Button($this->settings->MainFormId(),"delete",
 						                                       "CommandDeleteElement".$element->GetName(),$element->GetName()) ;
 			$this->result.=$this->output_interface->TableCol_end() ;
+		 }
 		}
 			
 		$this->level++ ; 
@@ -251,25 +296,70 @@ class CommandChangeParent extends EditContentStructureCommand
 }
 
 
-// visitor to modify content tables when add
+// visitor to modify database structure when adding content element
 class StructureAddVisitor extends ContentVisitor
 {
 	private $settings ;
-	private $table_create ;
+	private $sqlconnect ;
 	
-	function __construct($settings,$table_create=0) { $this->settings=$settings ; $this->table_create=$table_create ; }
+	function __construct($settings,$sqlconnect) { $this->settings=$settings ; $this->sqlconnect=$sqlconnect ; }
 	
 	function VisitString($string)
 	{
-		return "alter table ".$this->settings->Prefix().$string->Par()->GetName().
-		       " add ".$string->GetName()." char(".$string->GetSize().")" ;
+		$query_str= "alter table ".$this->settings->Prefix().$string->Par()->GetName().
+		            " add ".$string->GetName()." char(".$string->GetSize().")" ;
+		$this->sqlconnect->SimpleQuery($query_str) ;
 	}
 
-	function VisitMasterTable($string)
+	function VisitMasterTable($table)
 	{
-		return "alter table ".$this->settings->Prefix().$string->Par()->GetName().
-		       " add ".$string->GetName()." char(".$string->GetSize().")" ;
+	    $query_str= "create table ".$this->settings->Prefix().$table->GetName()." (Id int(10) auto_increment, primary key (Id))" ;
+	    $this->sqlconnect->SimpleQuery($query_str) ;
 	}
+	
+	function VisitTableReference($reference)
+	{
+	    if ($reference->Par()->IsTableContent())
+	    {
+ 	     $query_str= "alter table ".$this->settings->Prefix().$reference->Par()->GetName().
+ 	     " add ".$reference->DisplayChild()." int(10) not null" ;
+	    
+	     $this->sqlconnect->SimpleQuery($query_str) ;
+	    }
+	}
+	
+}
+
+
+// visitor to modify database structure when deleting content element
+class StructureDelVisitor extends ContentVisitor
+{
+    private $settings ;
+    private $sqlconnect ;
+    
+    function __construct($settings,$sqlconnect) { $this->settings=$settings ; $this->sqlconnect=$sqlconnect ; }
+    
+    function VisitString($string)
+    {
+        $query_str="alter table ".$this->settings->Prefix().$string->Par()->GetName()." drop ".$string->GetName() ;        
+        $this->sqlconnect->SimpleQuery($query_str) ;
+    }
+
+    function VisitMasterTable($table)
+    {
+        $query_str= "drop table ".$this->settings->Prefix().$table->GetName() ;
+        $this->sqlconnect->SimpleQuery($query_str) ;
+    }
+
+    function VisitTableReference($reference)
+    {
+        if ($reference->Par()->IsTableContent())
+        {
+            $query_str="alter table ".$this->settings->Prefix().$reference->Par()->GetName()." drop ".$reference->DisplayChild() ;
+            $this->sqlconnect->SimpleQuery($query_str) ;
+        }
+    }
+    
 }
 
 
@@ -278,25 +368,18 @@ class StructureAddVisitor extends ContentVisitor
 class ChangeContentStructureCommand extends ContentSQLCommand
 {
 	// perform content-specific operations after adding $new_object as child using StructureAddVisitor
-	// if $table_create then not only add field to parent table, but create new table for TableContent  
-	function Add($new_object,$table_create=0)
+	function Add($new_object)
 	{
-		$struct_add_visitor=new StructureAddVisitor($this->settings) ;
-		$query=$new_object->Accept($struct_add_visitor) ;
-		if (strlen($query))
-			$this->sqlconnect->SimpleQuery($query) ;
+		$struct_add_visitor=new StructureAddVisitor($this->settings,$this->sqlconnect) ;
+		$new_object->Accept($struct_add_visitor) ;
 	}
 	
 	
 	// perform content-specific operations after deleting $element from structure 
-	// if $table_drop then not only drop field from parent table, but drop entire table for TableContent  
-	function Del($element,$table_drop=0)
+	function Del($element)
 	{
-		if ($element->Par()->IsTableContent()) // if parent is table, then drop field from it
-		{
-			$query="alter table ".$this->settings->Prefix().$element->Par()->GetName()." drop ".$element->GetName() ;
-			$this->sqlconnect->SimpleQuery($query) ;
-		}
+	    $struct_del_visitor=new StructureDelVisitor($this->settings,$this->sqlconnect) ;
+	    $element->Accept($struct_del_visitor) ;
 	}
 	
 	// save whole structure
@@ -317,7 +400,7 @@ class CommandDeleteElement extends ChangeContentStructureCommand
 		{
 			$element->Par()->DelChild($this->suffix) ;	
 			
-			$this->Del($element,1) ;			
+			$this->Del($element) ;			
 			$this->Save() ;
 		}
 	}
@@ -349,6 +432,22 @@ class CommandInsertElement extends ChangeContentStructureCommand
 			$this->Save() ;
  		}
 	}
+}
+
+
+class CommandUpdateElement extends ChangeContentStructureCommand
+{
+    function Execute()
+    {
+     $element=$this->content->GetElementByName($this->post_obj->Name) ;
+     
+     // using visitor object to restore specific fields from POST object
+     $restore_visitor=new RestoreElementVisitor ;
+     $restore_visitor->SetObject($this->post_obj) ;
+     $element->Accept($restore_visitor) ;
+     
+     $this->Save() ;
+    }
 }
 
 
@@ -405,8 +504,9 @@ class StructurePageView extends PageView
 		             "CommandAddSibling" => new CommandAddSibling($this->struct_view_builder),
 		             "CommandEditElement" => new CommandEditElement($this->struct_view_builder),
 		             "CommandChangeParent" => new CommandChangeParent($this->struct_view_builder),
-					 "CommandInsertElement" => new CommandInsertElement($this->settings, $this->sqlconnect, $this->content),
-				     "CommandNewParent" => new CommandNewParent($this->settings, $this->sqlconnect, $this->content),
+		             "CommandInsertElement" => new CommandInsertElement($this->settings, $this->sqlconnect, $this->content),
+		             "CommandUpdateElement" => new CommandUpdateElement($this->settings, $this->sqlconnect, $this->content),
+		             "CommandNewParent" => new CommandNewParent($this->settings, $this->sqlconnect, $this->content),
 					 "CommandDeleteElement" => new CommandDeleteElement($this->settings, $this->sqlconnect, $this->content)) ;
 		
 	}
