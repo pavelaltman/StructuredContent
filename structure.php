@@ -58,20 +58,25 @@ class StructureViewBuilder extends Builder
 	}
 	
 	
-	function TreeIndent()
+	function TreeIndent($element)
 	{
 		for($i=0 ; $i< $this->level ; $i++)
-			$this->result.="....." ;
-		$this->result.="!__" ;
+			$this->result.="---" ;
+		if ($element->HasChildren() && !$element->IsReference())
+		    if ($element->GetCollapsed())
+		        $this->result.=$this->output_interface->Button($this->settings->MainFormId(),"+","CommandExpandElement".$element->GetName(),$element->GetName()) ;
+		    else 
+		        $this->result.=$this->output_interface->Button($this->settings->MainFormId(),"-","CommandCollapseElement".$element->GetName(),$element->GetName()) ;
+		else $this->result.="-" ;
 	}
 	
-	function BuildFormRow($parent_name,$after_child_name="")
+	function BuildFormRow($element,$parent_name,$after_child_name="")
 	{
 		$this->result.=$this->output_interface->TableRow() ;
 
 		// Name
 		$this->result.=$this->output_interface->TableCol() ;
-		$this->TreeIndent() ;
+		$this->TreeIndent($element) ;
 		$this->result.=$this->output_interface->TextInput("Name",20) ;
 		$this->result.=$this->output_interface->TableCol_end() ;
 		
@@ -110,7 +115,7 @@ class StructureViewBuilder extends Builder
 
 		$this->result.=$this->output_interface->TableCol() ;
 
-		$this->TreeIndent() ;
+		$this->TreeIndent($element) ;
 		
 		if ($this->edit_name==$element->GetName())
 		{
@@ -240,7 +245,7 @@ class StructureViewBuilder extends Builder
 
 		// builds form row if CommandAddChild was invoked
 		if ($this->add_child_name==$element->GetName())
-			$this->BuildFormRow($element->GetName()) ;
+			$this->BuildFormRow($element,$element->GetName()) ;
 	}
 	
 	function BuildElementEnd($element) 
@@ -252,7 +257,7 @@ class StructureViewBuilder extends Builder
 		// builds form row if CommandAddSibling was invoked
 		if ($this->add_sibling_name==$element->GetName())
 		{
-			$this->BuildFormRow($element->Par()->GetName(),$element->GetName()) ;
+			$this->BuildFormRow($element,$element->Par()->GetName(),$element->GetName()) ;
 		}
 		
 	}
@@ -451,6 +456,33 @@ class CommandUpdateElement extends ChangeContentStructureCommand
 }
 
 
+class CommandExpandElement extends ChangeContentStructureCommand
+{
+    function Execute()
+    {
+        $element=$this->content->GetElementByName($this->suffix) ;
+        if ($element)
+        {
+            $element->SetCollapsed(0) ;
+            $this->Save() ;
+        }
+    }
+}
+
+class CommandCollapseElement extends ChangeContentStructureCommand
+{
+    function Execute()
+    {
+        $element=$this->content->GetElementByName($this->suffix) ;
+        if ($element)
+        {
+            $element->SetCollapsed(1) ;
+            $this->Save() ;
+        }
+    }
+}
+
+
 class CommandNewParent extends ChangeContentStructureCommand
 {
 	function Execute()
@@ -506,6 +538,8 @@ class StructurePageView extends PageView
 		             "CommandChangeParent" => new CommandChangeParent($this->struct_view_builder),
 		             "CommandInsertElement" => new CommandInsertElement($this->settings, $this->sqlconnect, $this->content),
 		             "CommandUpdateElement" => new CommandUpdateElement($this->settings, $this->sqlconnect, $this->content),
+		             "CommandExpandElement" => new CommandExpandElement($this->settings, $this->sqlconnect, $this->content),
+		             "CommandCollapseElement" => new CommandCollapseElement($this->settings, $this->sqlconnect, $this->content),
 		             "CommandNewParent" => new CommandNewParent($this->settings, $this->sqlconnect, $this->content),
 					 "CommandDeleteElement" => new CommandDeleteElement($this->settings, $this->sqlconnect, $this->content)) ;
 		
@@ -517,7 +551,7 @@ class StructurePageView extends PageView
 	    $view='<!DOCTYPE html> <p> <a href="index.php">Content</a> <a href="structure.php"><b>Structure</b></a></p>'."\n<p>" ;
 	    
 	    
-	    $parser=new ContentParser($this->struct_view_builder,1) ;
+	    $parser=new ContentParser($this->struct_view_builder,1,1) ; // stop reference && skip collapsed
 		$parser->Parse($this->content) ;
 		return $view.$this->struct_view_builder->Get() ;
 	}

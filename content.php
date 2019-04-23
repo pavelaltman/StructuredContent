@@ -51,10 +51,14 @@ abstract class Content
 	//abstract function ReplaceChild_keepname($name,$newchild) ;
 	//abstract function ReplaceChild_newname($name,$newname,$newchild) ;
 	
-	abstract function IsLeaf() ;
+	abstract function IsLeaf() ; // simple or composite content
+	function HasChildren() { return false; } // composite and have at list one child  
+	
 	function DependsFromParent() { return false ; } 
 	function IsTableContent() { return false ; }
 	function IsReference() { return false ; }
+	function GetCollapsed() { return false ;}
+	function SetCollapsed($col) {}
 	
 	function GetSize() { return "" ; }
 	function DisplayChild() { return "" ; }
@@ -202,8 +206,13 @@ abstract class CompositeContent extends Content
 	function DisplayChildObject() { return $this->children[$this->DisplayChild()] ; }
 	
 	function IsLeaf() { return false ;}
+	function HasChildren() { return count($this->children) ; }
 	
 	function CanCascadeDelete() { return false ; }
+	
+	private $collapsed ;
+	function SetCollapsed($col) { $this->collapsed=$col ;}
+	function GetCollapsed() { return $this->collapsed ;}
 }
 
 
@@ -841,6 +850,7 @@ class SaveBuilder extends Builder
 		$this->query->add_insert($this->settings->ContentTable()) ; 
 		
 		// adding common fields to insert query
+		$this->query->add_values("Collapsed",$element->GetCollapsed()) ;
 		$this->query->add_values("Name",$element->GetName()) ; 
 		$this->query->add_values("ClassName",get_class($element)) ;
 		if ($par=$element->Par()) 
@@ -921,15 +931,17 @@ class ContentParser
 {
 	private $builders ;
 	private $stop_reference ; // if set to non-zero, stops parsing on reference content 
+	private $skip_collapsed ; // if non-zero, does not parse children 
 	
-	function __construct($builders, $stop=0) { $this->builders=$builders ; $this->stop_reference=$stop ; }
+	function __construct($builders, $stop=0, $skip=0) { $this->builders=$builders ; $this->stop_reference=$stop ; $this->skip_collapsed=$skip ; }
 	
 	// "normal" parse
 	function ParseElement($content_element,$t_par=null)
 	{
 		$this->builders->BuildElementStart($content_element,$t_par) ;
 		
-		if (!$this->stop_reference || !$content_element->IsReference())
+		// Parse children if not stop reference and if not skip collapsed 
+		if ((!$this->stop_reference || !$content_element->IsReference()) && (!$this->skip_collapsed || !$content_element->GetCollapsed()))
 		{
 			$iterator=$content_element->GetChildrenIterator() ;
 			for ($iterator->First() ; !$iterator->IsDone() ; $iterator->Next())
@@ -1037,6 +1049,8 @@ class ContentRestorer
 			// adding class-specific fields to query
 			$restore_visitor->SetObject($row) ;
 			$current_obj->Accept($restore_visitor) ; 
+			
+			$current_obj->SetCollapsed($row->Collapsed);
 					
 			array_splice($stack,0,$row->Chldrn) ; // shifts stack from used children
 			array_unshift($stack,$current_obj) ; // unshift new object to stack 
