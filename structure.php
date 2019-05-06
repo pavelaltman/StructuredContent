@@ -316,10 +316,26 @@ class StructureAddVisitor extends ContentVisitor
 		$this->sqlconnect->SimpleQuery($query_str) ;
 	}
 
-	function VisitMasterTable($table)
+	function _CreateTableWithId($table)
 	{
 	    $query_str= "create table ".$this->settings->Prefix().$table->GetName()." (Id int(10) auto_increment, primary key (Id))" ;
 	    $this->sqlconnect->SimpleQuery($query_str) ;
+	}
+	
+	function VisitMasterTable($table) 
+	{ 
+	    $this->_CreateTableWithId($table) ;	// Only create table, it's always standalone in domain
+	}
+	
+	function VisitAttributeTable($table) 
+	{ 
+	    $this->_CreateTableWithId($table) ;	// First, create table 
+	    if ($table->Par()->IsTableContent())
+	    {
+	        // If it's "depended" attribute table then add field to parent table
+	        $query_str= "alter table ".$this->settings->Prefix().$table->Par()->GetName()." add ".$table->GetName()." int(10)" ;
+	        $this->sqlconnect->SimpleQuery($query_str) ;
+	    }
 	}
 	
 	function VisitTableReference($reference)
@@ -350,12 +366,29 @@ class StructureDelVisitor extends ContentVisitor
         $this->sqlconnect->SimpleQuery($query_str) ;
     }
 
-    function VisitMasterTable($table)
+    function _DropTable($table) // common function to drop table when delete any type of table content
     {
         $query_str= "drop table ".$this->settings->Prefix().$table->GetName() ;
         $this->sqlconnect->SimpleQuery($query_str) ;
     }
 
+    function VisitMasterTable($table)  
+    { 
+        $this->_DropTable($table) ; 
+    }
+
+    function VisitAttributeTable($table) 
+    { 
+        $this->_DropTable($table) ; // Firts drop table
+        if ($table->Par()->IsTableContent())
+        {
+            // if it was "dependent" attribut table then drop field in parent table
+            $query_str="alter table ".$this->settings->Prefix().$table->Par()->GetName()." drop ".$table->GetName() ;
+            $this->sqlconnect->SimpleQuery($query_str) ;
+        }
+    }
+    
+   
     function VisitTableReference($reference)
     {
         if ($reference->Par()->IsTableContent())
@@ -380,7 +413,7 @@ class ChangeContentStructureCommand extends ContentSQLCommand
 	}
 	
 	
-	// perform content-specific operations after deleting $element from structure 
+	// perform content-specific operations after deleting $element from structure using StructureDelVisitor
 	function Del($element)
 	{
 	    $struct_del_visitor=new StructureDelVisitor($this->settings,$this->sqlconnect) ;
@@ -456,29 +489,32 @@ class CommandUpdateElement extends ChangeContentStructureCommand
 }
 
 
-class CommandExpandElement extends ChangeContentStructureCommand
+class CommandExpandOrCollapseElement extends ChangeContentStructureCommand
 {
-    function Execute()
+    function _Execute($collapsed)
     {
         $element=$this->content->GetElementByName($this->suffix) ;
         if ($element)
         {
-            $element->SetCollapsed(0) ;
+            $element->SetCollapsed($collapsed) ;
             $this->Save() ;
         }
     }
 }
 
-class CommandCollapseElement extends ChangeContentStructureCommand
+class CommandExpandElement extends CommandExpandOrCollapseElement
 {
     function Execute()
     {
-        $element=$this->content->GetElementByName($this->suffix) ;
-        if ($element)
-        {
-            $element->SetCollapsed(1) ;
-            $this->Save() ;
-        }
+        $this->_Execute(0) ;
+    }
+}
+
+class CommandCollapseElement extends CommandExpandOrCollapseElement
+{
+    function Execute()
+    {
+        $this->_Execute(1) ;
     }
 }
 

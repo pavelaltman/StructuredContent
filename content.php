@@ -931,7 +931,7 @@ class ContentParser
 {
 	private $builders ;
 	private $stop_reference ; // if set to non-zero, stops parsing on reference content 
-	private $skip_collapsed ; // if non-zero, does not parse children 
+	private $skip_collapsed ; // if non-zero, does not parse children if collapsed flag is on
 	
 	function __construct($builders, $stop=0, $skip=0) { $this->builders=$builders ; $this->stop_reference=$stop ; $this->skip_collapsed=$skip ; }
 	
@@ -1000,7 +1000,6 @@ class ReferencesBuilder extends Builder
 		{
 			$chld=$this->root->GetElementByName($element->DisplayChild()) ;
 			$element->AddChild($chld) ; 
-			//print_r($element) ;
 		}
 	}
 }
