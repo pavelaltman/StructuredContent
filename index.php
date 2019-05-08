@@ -1,8 +1,6 @@
 <?php
 require_once 'content.php';
 
-// 19.03.2016 reinstall eclipse on new notebook
-
 // visitor to display view, defined by ViewContent element of Content structure
 class GetViewVisitor extends ContentVisitor
 {

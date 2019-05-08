@@ -92,6 +92,9 @@ abstract class Content
 	// useful functions to bypass reference in traversing 
 	function UpperTableName() { return $this->name ; } // overloaded in Reference
 	function LowerName() { return $this->name; } // overloaded in Reference
+	function UpperObject() { return $this ; } // overloaded in Reference
+	function LowerObject() { return $this ; } // overloaded in Reference
+	
 	
 	function GetElementByName($name)
 	{
@@ -280,6 +283,12 @@ class TableReference extends CompositeContent
 	
 	// overloads regular LowerName(), returns childs's
 	function LowerName() { return $this->DisplayChildObject()->GetName() ; }
+	
+	// overloads regular UpperObject(), returns parent's
+	function UpperObject() { return $this->Par() ; }
+	
+	// overloads regular LowerObject(), returns childs's
+	function LowerObject() { return $this->DisplayChildObject() ; }
 	
 	function Accept($visitor,$t_par)
 	{
@@ -569,12 +578,16 @@ class QueryElementVisitor extends ContentVisitor
 		$this->query->add_select($this->settings->Prefix().$table->GetName().'.Id as '.$table->GetName()) ;
 	}
 	
-	function VisitMasterTable($mastertable)	
-	{ 
-		$this->query->add_from($this->settings->Prefix().$mastertable->GetName()) ;
-		// $this->query->add_select($this->settings->Prefix().$mastertable->GetName().".Id") ; 
-		$this->AddIdToQuery($mastertable) ;
-		$this->query->add_order($mastertable->DisplayChild()) ;
+	private function _VisitRootTable($table) // Visit root table of query
+	{
+	    $this->query->add_from($this->settings->Prefix().$table->GetName()) ;
+	    $this->AddIdToQuery($table) ;
+	    $this->query->add_order($table->DisplayChild()) ;
+	}
+	
+	function VisitMasterTable($mastertable)
+	{
+        $this->_VisitRootTable($mastertable) ; // master table is always root in query
 	}
 	
 	function VisitMultiDetailTable($mdt)	
@@ -587,17 +600,27 @@ class QueryElementVisitor extends ContentVisitor
 	function VisitAttributeTable($at,$t_par=null)	
 	{ 
 		$tabname=$this->settings->Prefix().$at->GetName() ;
-		$this->query->add_join($tabname,
+		
+		// print_r($t_par) ;
+		
+		if ($t_par) // if this attribute table have parent in current parsing 
+		{
+		 $this->query->add_join($tabname,
 				               $tabname.'.Id='.$this->settings->Prefix().$t_par->UpperTableName().'.'.$at->GetName()) ;
 		
-		$this->AddIdToQuery($at) ;
+		 $this->AddIdToQuery($at) ;
 		
-		// if this attribute table has current value, then adding filter 
-		if ($at->FiltersOutput())
-		{
+		 // if this attribute table has current value, then adding filter 
+		 if ($at->FiltersOutput())
+		 {
 			$value=$at->CurrentValue() ;
 			if ($value)
 				$this->query->add_where($this->settings->Prefix().$t_par->UpperTableName().'.'.$at->GetName().'='.$value) ;
+		 }
+		}
+		else 
+		{
+		    $this->_VisitRootTable($at) ; // if not parent in current parsing then this attribute table is root
 		}
 	}
 }
